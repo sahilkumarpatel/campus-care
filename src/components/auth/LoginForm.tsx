@@ -12,13 +12,16 @@ const LoginForm = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     
     if (!email || !password) {
+      setError('Please enter both email and password');
       return;
     }
     
@@ -26,8 +29,8 @@ const LoginForm = () => {
       setLoading(true);
       await login(email, password);
       navigate('/dashboard');
-    } catch (error) {
-      console.error(error);
+    } catch (error: any) {
+      setError(error.message);
     } finally {
       setLoading(false);
     }
@@ -49,7 +52,7 @@ const LoginForm = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="your.email@college.edu"
+                placeholder="your.email@pccoepune.org"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -72,6 +75,7 @@ const LoginForm = () => {
                 className="w-full"
               />
             </div>
+            {error && <p className="text-campus-error text-sm mt-1">{error}</p>}
             <Button type="submit" className="w-full bg-campus-primary hover:bg-campus-primary/90" disabled={loading}>
               {loading ? "Logging in..." : "Login"}
             </Button>

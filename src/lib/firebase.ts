@@ -5,12 +5,12 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDummyKeyReplacethiswithyouractualkey",
-  authDomain: "campuscare-app.firebaseapp.com",
-  projectId: "campuscare-app",
-  storageBucket: "campuscare-app.appspot.com",
-  messagingSenderId: "123456789012",
-  appId: "1:123456789012:web:abcdefghijklmnopqrstuv"
+  apiKey: "AIzaSyCab84rBOO_ooUgZK51N3lEzUNQyQCzebQ",
+  authDomain: "campuscare-26d25.firebaseapp.com",
+  projectId: "campuscare-26d25",
+  storageBucket: "campuscare-26d25.firebasestorage.app",
+  messagingSenderId: "851214907640",
+  appId: "1:851214907640:web:266dd9328c96df1e34a30d"
 };
 
 // Initialize Firebase services
