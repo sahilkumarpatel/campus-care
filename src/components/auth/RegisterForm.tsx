@@ -18,8 +18,8 @@ const RegisterForm = () => {
   const navigate = useNavigate();
 
   const validateEmail = (email: string) => {
-    // Basic college email validation - you might want to customize this
-    const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.(edu|ac\.[a-zA-Z]{2,}|edu\.[a-zA-Z]{2,})$/;
+    // Update the regex to specifically check for pccoepune.org emails
+    const regex = /^[a-zA-Z0-9._-]+@pccoepune\.org$/;
     return regex.test(email);
   };
 
@@ -33,7 +33,7 @@ const RegisterForm = () => {
     }
 
     if (!validateEmail(email)) {
-      setError("Please use a valid college email address");
+      setError("Please use a valid @pccoepune.org email address");
       return;
     }
 
@@ -68,7 +68,7 @@ const RegisterForm = () => {
               <Label htmlFor="name">Full Name</Label>
               <Input
                 id="name"
-                placeholder="John Doe"
+                placeholder="Ram"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
@@ -79,7 +79,7 @@ const RegisterForm = () => {
               <Input
                 id="email"
                 type="email"
-                placeholder="your.email@college.edu"
+                placeholder="your.email@pccoepune.org"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
