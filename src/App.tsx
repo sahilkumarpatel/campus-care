@@ -19,6 +19,10 @@ import ReportDetail from "./pages/ReportDetail";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import AdminReportList from "./pages/admin/AdminReportList";
+import AdminUserManagement from "./pages/admin/AdminUserManagement";
+import AdminTeamManagement from "./pages/admin/AdminTeamManagement";
 
 const queryClient = new QueryClient();
 
@@ -45,8 +49,12 @@ const App = () => (
               <Route path="/profile" element={<Profile />} />
               <Route path="/settings" element={<Settings />} />
               
-              {/* Admin routes would go here */}
+              {/* Admin routes */}
+              <Route path="/admin" element={<AdminDashboard />} />
+              <Route path="/admin/reports" element={<AdminReportList />} />
               <Route path="/admin/reports/:reportId" element={<ReportDetail />} />
+              <Route path="/admin/users" element={<AdminUserManagement />} />
+              <Route path="/admin/teams" element={<AdminTeamManagement />} />
             </Route>
             
             {/* Catch-all route */}

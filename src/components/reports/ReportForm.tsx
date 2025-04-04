@@ -47,6 +47,28 @@ const ReportForm = () => {
     }
   };
 
+  const takePicture = () => {
+    // Create a hidden input element to trigger camera
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // This opens the camera directly on mobile devices
+    
+    input.onchange = (e: any) => {
+      const file = e.target?.files?.[0];
+      if (file) {
+        setImage(file);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreview(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    
+    input.click();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -72,7 +94,7 @@ const ReportForm = () => {
       }
       
       // Save report to Firestore
-      await addDoc(collection(db, 'reports'), {
+      const docRef = await addDoc(collection(db, 'reports'), {
         title,
         description,
         category,
@@ -90,7 +112,8 @@ const ReportForm = () => {
         description: "Your issue has been reported successfully!",
       });
       
-      navigate('/my-reports');
+      // Redirect to the newly created report
+      navigate(`/my-reports/${docRef.id}`);
     } catch (error) {
       console.error('Error submitting report:', error);
       toast({
@@ -191,6 +214,17 @@ const ReportForm = () => {
                     </div>
                   )}
                 </label>
+              </div>
+              <div className="flex justify-center mt-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={takePicture}
+                  className="flex items-center"
+                >
+                  <Camera className="h-4 w-4 mr-2" />
+                  Take Photo
+                </Button>
               </div>
             </div>
             

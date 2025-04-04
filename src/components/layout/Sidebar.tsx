@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
-import { Home, FileText, Settings, User, ChevronRight, Plus, ClipboardList } from 'lucide-react';
+import { Home, FileText, Settings, User, ChevronRight, Plus, ClipboardList, Users, Shield } from 'lucide-react';
 
 interface SidebarProps {
   isMobile?: boolean;
@@ -15,8 +15,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
   const location = useLocation();
   const { currentUser } = useAuth();
   
-  // Check if user is admin (in a real app, you would check this in your user data)
-  const isAdmin = currentUser?.email === 'admin@college.edu';
+  // Check if user is admin
+  const isAdmin = currentUser?.email === 'admin@pccoepune.org';
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -61,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
     { 
       name: 'Admin Dashboard', 
       path: '/admin', 
-      icon: <Home className="mr-2 h-5 w-5" /> 
+      icon: <Shield className="mr-2 h-5 w-5" /> 
     },
     { 
       name: 'Manage Reports', 
@@ -72,6 +72,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
       name: 'Manage Users', 
       path: '/admin/users', 
       icon: <User className="mr-2 h-5 w-5" /> 
+    },
+    { 
+      name: 'Manage Teams', 
+      path: '/admin/teams', 
+      icon: <Users className="mr-2 h-5 w-5" /> 
     },
   ];
 
