@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, CollectionReference, Query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import ReportCard, { ReportType } from './ReportCard';
@@ -26,25 +26,31 @@ const ReportList: React.FC<ReportListProps> = ({ isAdminView = false }) => {
       try {
         setLoading(true);
         
-        // Create base query
-        let reportQuery = collection(db, 'reports');
+        // Create base collection reference
+        const reportsCollectionRef = collection(db, 'reports');
         
-        // If not admin view, filter by current user
+        // Create appropriate query based on view type
+        let reportsQuery: Query;
+        
         if (!isAdminView && currentUser) {
-          reportQuery = query(
-            reportQuery, 
+          // For user view, filter by current user
+          reportsQuery = query(
+            reportsCollectionRef, 
             where('reportedBy', '==', currentUser.uid),
             orderBy('createdAt', 'desc')
           );
         } else if (isAdminView) {
           // For admin view, just order by createdAt
-          reportQuery = query(
-            reportQuery,
+          reportsQuery = query(
+            reportsCollectionRef,
             orderBy('createdAt', 'desc')
           );
+        } else {
+          // Default query if no conditions met
+          reportsQuery = query(reportsCollectionRef, orderBy('createdAt', 'desc'));
         }
         
-        const querySnapshot = await getDocs(reportQuery);
+        const querySnapshot = await getDocs(reportsQuery);
         
         const fetchedReports: ReportType[] = [];
         querySnapshot.forEach((doc) => {
