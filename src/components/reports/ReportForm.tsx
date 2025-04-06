@@ -89,8 +89,8 @@ const ReportForm = () => {
       // Upload image if provided
       if (image) {
         const storageRef = ref(storage, `reports/${currentUser?.uid}/${Date.now()}_${image.name}`);
-        const snapshot = await uploadBytes(storageRef, image);
-        imageUrl = await getDownloadURL(snapshot.ref);
+        await uploadBytes(storageRef, image);
+        imageUrl = await getDownloadURL(storageRef);
       }
       
       // Save report to Firestore
@@ -114,11 +114,11 @@ const ReportForm = () => {
       
       // Redirect to the newly created report
       navigate(`/my-reports/${docRef.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting report:', error);
       toast({
         title: "Error",
-        description: "Failed to submit report. Please try again.",
+        description: `Failed to submit report: ${error.message}`,
         variant: "destructive",
       });
     } finally {
