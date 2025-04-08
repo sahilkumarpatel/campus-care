@@ -7,12 +7,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, MapPin, Upload, Bell } from 'lucide-react';
+import { Camera, MapPin } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { db, storage } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
@@ -74,7 +71,7 @@ const ReportForm = () => {
     input.click();
   };
 
-  const sendNotificationToAdmin = async (reportId: string, reportData: any) => {
+  const sendNotificationToAdmin = async (reportId: string, reportInfo: any) => {
     try {
       // Save notification to Supabase
       const { data, error } = await supabase
@@ -84,10 +81,10 @@ const ReportForm = () => {
             recipient: 'admin',
             type: 'new_report',
             read: false,
-            title: `New report: ${reportData.title}`,
-            content: `A new report has been submitted by ${reportData.reporterName}`,
+            title: `New report: ${reportInfo.title}`,
+            content: `A new report has been submitted by ${reportInfo.reporter_name}`,
             report_id: reportId,
-            user_id: reportData.reportedBy
+            user_id: reportInfo.reported_by
           }
         ]);
         
@@ -138,7 +135,7 @@ const ReportForm = () => {
       }
       
       // Create report object
-      const reportData = {
+      const newReport = {
         title,
         description,
         category,
@@ -153,9 +150,9 @@ const ReportForm = () => {
       };
       
       // Save report to Supabase
-      const { data: reportData, error: reportError } = await supabase
+      const { data: savedReports, error: reportError } = await supabase
         .from('reports')
-        .insert([reportData])
+        .insert([newReport])
         .select();
       
       if (reportError) {
@@ -163,8 +160,8 @@ const ReportForm = () => {
       }
       
       // Send notification to admin
-      if (reportData && reportData.length > 0) {
-        await sendNotificationToAdmin(reportData[0].id, reportData[0]);
+      if (savedReports && savedReports.length > 0) {
+        await sendNotificationToAdmin(savedReports[0].id, savedReports[0]);
       }
       
       toast({
