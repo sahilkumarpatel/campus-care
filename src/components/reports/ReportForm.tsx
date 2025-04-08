@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -33,9 +34,12 @@ const ReportForm = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Define the missing variable - negating isSupabaseConfigured
+  const isMissingSupabaseConfig = !isSupabaseConfigured;
+
   // Check Supabase configuration on component mount
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (isMissingSupabaseConfig) {
       toast({
         title: "Configuration Error",
         description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
@@ -79,7 +83,7 @@ const ReportForm = () => {
   };
 
   const sendNotificationToAdmin = async (reportId: string, report: any) => {
-    if (!isSupabaseConfigured) return;
+    if (isMissingSupabaseConfig) return;
     
     try {
       // Save notification to Supabase
@@ -108,7 +112,7 @@ const ReportForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!isSupabaseConfigured) {
+    if (isMissingSupabaseConfig) {
       toast({
         title: "Configuration Error",
         description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
