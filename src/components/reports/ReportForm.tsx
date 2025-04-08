@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -34,10 +33,8 @@ const ReportForm = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Define the missing variable - negating isSupabaseConfigured
   const isMissingSupabaseConfig = !isSupabaseConfigured;
 
-  // Check Supabase configuration on component mount
   useEffect(() => {
     if (isMissingSupabaseConfig) {
       toast({
@@ -46,7 +43,7 @@ const ReportForm = () => {
         variant: "destructive",
       });
     }
-  }, [toast]);
+  }, [toast, isMissingSupabaseConfig]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -61,11 +58,10 @@ const ReportForm = () => {
   };
 
   const takePicture = () => {
-    // Create a hidden input element to trigger camera
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.capture = 'environment'; // This opens the camera directly on mobile devices
+    input.capture = 'environment';
     
     input.onchange = (e: any) => {
       const file = e.target?.files?.[0];
@@ -86,7 +82,6 @@ const ReportForm = () => {
     if (isMissingSupabaseConfig) return;
     
     try {
-      // Save notification to Supabase
       const { data, error } = await supabase
         .from('notifications')
         .insert([
@@ -135,7 +130,6 @@ const ReportForm = () => {
     try {
       let imageUrl = null;
       
-      // Upload image to Supabase storage if provided
       if (image) {
         const fileName = `${Date.now()}_${image.name}`;
         const { data: fileData, error: uploadError } = await supabase
@@ -147,7 +141,6 @@ const ReportForm = () => {
           throw uploadError;
         }
         
-        // Get the public URL for the uploaded image
         const { data: { publicUrl } } = supabase
           .storage
           .from('report_images')
@@ -156,7 +149,6 @@ const ReportForm = () => {
         imageUrl = publicUrl;
       }
       
-      // Create report object
       const newReport = {
         title,
         description,
@@ -171,7 +163,6 @@ const ReportForm = () => {
         reporter_email: currentUser?.email,
       };
       
-      // Save report to Supabase
       const { data: savedReports, error: reportError } = await supabase
         .from('reports')
         .insert([newReport])
@@ -181,7 +172,6 @@ const ReportForm = () => {
         throw reportError;
       }
       
-      // Send notification to admin
       if (savedReports && savedReports.length > 0) {
         await sendNotificationToAdmin(savedReports[0].id, savedReports[0]);
       }
@@ -191,7 +181,6 @@ const ReportForm = () => {
         description: "Your issue has been reported successfully!",
       });
       
-      // Redirect to the user reports page
       navigate('/my-reports');
     } catch (error: any) {
       console.error('Error submitting report:', error);
