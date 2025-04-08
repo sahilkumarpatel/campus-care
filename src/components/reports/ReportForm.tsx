@@ -7,12 +7,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, MapPin, Upload } from 'lucide-react';
+import { Camera, MapPin, Upload, Bell } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { db, storage } from '@/lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 const categories = [
   { value: 'parking', label: 'Parking Issue' },
@@ -69,6 +74,31 @@ const ReportForm = () => {
     input.click();
   };
 
+  const sendNotificationToAdmin = async (reportId: string, reportData: any) => {
+    try {
+      // Save notification to Supabase
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert([
+          { 
+            recipient: 'admin',
+            type: 'new_report',
+            read: false,
+            title: `New report: ${reportData.title}`,
+            content: `A new report has been submitted by ${reportData.reporterName}`,
+            report_id: reportId,
+            user_id: reportData.reportedBy
+          }
+        ]);
+        
+      if (error) {
+        console.error('Error sending notification:', error);
+      }
+    } catch (error) {
+      console.error('Failed to send admin notification:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -86,39 +116,69 @@ const ReportForm = () => {
     try {
       let imageUrl = null;
       
-      // Upload image if provided
+      // Upload image to Supabase storage if provided
       if (image) {
-        const storageRef = ref(storage, `reports/${currentUser?.uid}/${Date.now()}_${image.name}`);
-        await uploadBytes(storageRef, image);
-        imageUrl = await getDownloadURL(storageRef);
+        const fileName = `${Date.now()}_${image.name}`;
+        const { data: fileData, error: uploadError } = await supabase
+          .storage
+          .from('report_images')
+          .upload(`reports/${currentUser?.uid}/${fileName}`, image);
+        
+        if (uploadError) {
+          throw uploadError;
+        }
+        
+        // Get the public URL for the uploaded image
+        const { data: { publicUrl } } = supabase
+          .storage
+          .from('report_images')
+          .getPublicUrl(`reports/${currentUser?.uid}/${fileName}`);
+          
+        imageUrl = publicUrl;
       }
       
-      // Save report to Firestore
-      const docRef = await addDoc(collection(db, 'reports'), {
+      // Create report object
+      const reportData = {
         title,
         description,
         category,
         location,
-        imageUrl,
+        image_url: imageUrl,
         status: 'submitted',
-        createdAt: serverTimestamp(),
-        reportedBy: currentUser?.uid,
-        reporterName: currentUser?.displayName,
-        reporterEmail: currentUser?.email,
-      });
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        reported_by: currentUser?.uid,
+        reporter_name: currentUser?.displayName,
+        reporter_email: currentUser?.email,
+      };
+      
+      // Save report to Supabase
+      const { data: reportData, error: reportError } = await supabase
+        .from('reports')
+        .insert([reportData])
+        .select();
+      
+      if (reportError) {
+        throw reportError;
+      }
+      
+      // Send notification to admin
+      if (reportData && reportData.length > 0) {
+        await sendNotificationToAdmin(reportData[0].id, reportData[0]);
+      }
       
       toast({
         title: "Report submitted",
         description: "Your issue has been reported successfully!",
       });
       
-      // Redirect to the newly created report
-      navigate(`/my-reports/${docRef.id}`);
+      // Redirect to the user reports page
+      navigate('/my-reports');
     } catch (error: any) {
       console.error('Error submitting report:', error);
       toast({
         title: "Error",
-        description: `Failed to submit report: ${error.message}`,
+        description: `Failed to submit report: ${error.message || 'Unknown error'}`,
         variant: "destructive",
       });
     } finally {

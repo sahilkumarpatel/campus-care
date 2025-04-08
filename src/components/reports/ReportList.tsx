@@ -1,13 +1,16 @@
 
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, getDocs, CollectionReference, Query } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
 import { useAuth } from '@/context/AuthContext';
 import ReportCard, { ReportType } from './ReportCard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, FilterX } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 interface ReportListProps {
   isAdminView?: boolean;
@@ -33,55 +36,73 @@ const ReportList: React.FC<ReportListProps> = ({
     setStatusFilter(initialStatusFilter);
   }, [initialSearchTerm, initialStatusFilter]);
 
+  // Subscribe to real-time changes
   useEffect(() => {
-    const fetchReports = async () => {
-      try {
-        setLoading(true);
-        
-        // Create base collection reference
-        const reportsCollectionRef = collection(db, 'reports');
-        
-        // Create appropriate query based on view type
-        let reportsQuery: Query;
-        
-        if (!isAdminView && currentUser) {
-          // For user view, filter by current user
-          reportsQuery = query(
-            reportsCollectionRef, 
-            where('reportedBy', '==', currentUser.uid),
-            orderBy('createdAt', 'desc')
-          );
-        } else if (isAdminView) {
-          // For admin view, just order by createdAt
-          reportsQuery = query(
-            reportsCollectionRef,
-            orderBy('createdAt', 'desc')
-          );
-        } else {
-          // Default query if no conditions met
-          reportsQuery = query(reportsCollectionRef, orderBy('createdAt', 'desc'));
-        }
-        
-        const querySnapshot = await getDocs(reportsQuery);
-        
-        const fetchedReports: ReportType[] = [];
-        querySnapshot.forEach((doc) => {
-          fetchedReports.push({
-            id: doc.id,
-            ...doc.data()
-          } as ReportType);
-        });
-        
-        console.log("Fetched reports:", fetchedReports.length);
-        setReports(fetchedReports);
-      } catch (err) {
-        console.error('Error fetching reports:', err);
-        setError('Failed to load reports. Please try again.');
-      } finally {
-        setLoading(false);
-      }
+    const channel = supabase
+      .channel('reports_channel')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reports' 
+      }, (payload) => {
+        fetchReports();
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
     };
-    
+  }, []);
+
+  const fetchReports = async () => {
+    try {
+      setLoading(true);
+      
+      let query = supabase
+        .from('reports')
+        .select('*');
+      
+      // For user view, filter by current user
+      if (!isAdminView && currentUser) {
+        query = query.eq('reported_by', currentUser.uid);
+      }
+      
+      // Order by created_at descending
+      query = query.order('created_at', { ascending: false });
+      
+      const { data, error: supabaseError } = await query;
+      
+      if (supabaseError) {
+        throw supabaseError;
+      }
+      
+      if (data) {
+        // Transform Supabase data to match ReportType
+        const transformedReports: ReportType[] = data.map(report => ({
+          id: report.id,
+          title: report.title,
+          description: report.description,
+          category: report.category,
+          location: report.location,
+          status: report.status,
+          createdAt: new Date(report.created_at),
+          reportedBy: report.reported_by,
+          reporterName: report.reporter_name,
+          reporterEmail: report.reporter_email,
+          imageUrl: report.image_url
+        }));
+        
+        setReports(transformedReports);
+      }
+    } catch (err) {
+      console.error('Error fetching reports:', err);
+      setError('Failed to load reports. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchReports();
   }, [currentUser, isAdminView]);
 
@@ -116,7 +137,7 @@ const ReportList: React.FC<ReportListProps> = ({
     return (
       <div className="text-center p-8">
         <p className="text-campus-error">{error}</p>
-        <Button variant="outline" className="mt-4" onClick={() => window.location.reload()}>
+        <Button variant="outline" className="mt-4" onClick={() => fetchReports()}>
           Try Again
         </Button>
       </div>
