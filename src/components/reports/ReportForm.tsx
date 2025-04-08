@@ -14,7 +14,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 // Get environment variables
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseUrl = 'https://xfvtqlacvgngyhnwcort.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 // Create Supabase client only if both URL and key are available

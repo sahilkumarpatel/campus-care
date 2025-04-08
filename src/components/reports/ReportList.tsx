@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Search, FilterX } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseUrl = 'https://xfvtqlacvgngyhnwcort.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
