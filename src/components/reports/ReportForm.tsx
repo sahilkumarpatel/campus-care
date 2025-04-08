@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -134,7 +135,7 @@ const ReportForm = () => {
         const fileName = `${Date.now()}_${image.name}`;
         const { data: fileData, error: uploadError } = await supabase
           .storage
-          .from('report_images')
+          .from('report123')  // Changed from 'report_images' to 'report123'
           .upload(`reports/${currentUser?.uid}/${fileName}`, image);
         
         if (uploadError) {
@@ -143,7 +144,7 @@ const ReportForm = () => {
         
         const { data: { publicUrl } } = supabase
           .storage
-          .from('report_images')
+          .from('report123')  // Changed from 'report_images' to 'report123'
           .getPublicUrl(`reports/${currentUser?.uid}/${fileName}`);
           
         imageUrl = publicUrl;

@@ -1,16 +1,18 @@
-
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, ClipboardList, ChevronRight } from 'lucide-react';
+import { Plus, ClipboardList, ChevronRight, BellRing } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import ReportCard, { ReportType } from '@/components/reports/ReportCard';
+import { useToast } from '@/components/ui/use-toast';
+import supabase from '@/lib/supabase';
 
 const Dashboard = () => {
   const { currentUser } = useAuth();
+  const { toast } = useToast();
   const [recentReports, setRecentReports] = useState<ReportType[]>([]);
   const [reportCounts, setReportCounts] = useState({
     total: 0,
@@ -19,13 +21,102 @@ const Dashboard = () => {
     resolved: 0
   });
   const [loading, setLoading] = useState(true);
+  const [hasNewNotifications, setHasNewNotifications] = useState(false);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      if (!currentUser) return;
+    if (!currentUser?.uid) return;
+    
+    const reportsChannel = supabase
+      .channel('reports_changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reports',
+        filter: `reported_by=eq.${currentUser.uid}`
+      }, () => {
+        fetchDashboardData();
+        toast({
+          title: "Report Updated",
+          description: "One of your reports has been updated",
+        });
+      })
+      .subscribe();
       
-      try {
-        // Get recent reports
+    const notificationsChannel = supabase
+      .channel('user_notifications')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'notifications',
+        filter: `user_id=eq.${currentUser.uid}`
+      }, () => {
+        setHasNewNotifications(true);
+        toast({
+          title: "New Notification",
+          description: "You have a new notification",
+        });
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(reportsChannel);
+      supabase.removeChannel(notificationsChannel);
+    };
+  }, [currentUser?.uid, toast]);
+
+  const fetchDashboardData = async () => {
+    if (!currentUser) return;
+    
+    try {
+      setLoading(true);
+      
+      const { data: reportsData, error } = await supabase
+        .from('reports')
+        .select('*')
+        .eq('reported_by', currentUser.uid)
+        .order('created_at', { ascending: false })
+        .limit(3);
+      
+      if (error) {
+        throw error;
+      }
+      
+      if (reportsData) {
+        const reports: ReportType[] = reportsData.map(report => ({
+          id: report.id,
+          title: report.title,
+          description: report.description,
+          category: report.category,
+          status: report.status,
+          location: report.location,
+          imageUrl: report.image_url,
+          createdAt: new Date(report.created_at),
+          reportedBy: report.reported_by,
+          reporterName: report.reporter_name
+        }));
+        
+        setRecentReports(reports);
+        
+        const { data: countData, error: countError } = await supabase
+          .from('reports')
+          .select('status')
+          .eq('reported_by', currentUser.uid);
+          
+        if (countError) {
+          throw countError;
+        }
+        
+        if (countData) {
+          const counts = {
+            total: countData.length,
+            submitted: countData.filter(r => r.status === 'submitted').length,
+            inProgress: countData.filter(r => r.status === 'in-progress').length,
+            resolved: countData.filter(r => r.status === 'resolved').length
+          };
+          
+          setReportCounts(counts);
+        }
+      } else {
         const reportsQuery = query(
           collection(db, 'reports'),
           where('reportedBy', '==', currentUser.uid),
@@ -44,7 +135,6 @@ const Dashboard = () => {
         
         setRecentReports(reports);
         
-        // Count reports by status
         const allReportsQuery = query(
           collection(db, 'reports'),
           where('reportedBy', '==', currentUser.uid)
@@ -67,13 +157,15 @@ const Dashboard = () => {
         });
         
         setReportCounts(counts);
-      } catch (error) {
-        console.error('Error fetching dashboard data:', error);
-      } finally {
-        setLoading(false);
       }
-    };
-    
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchDashboardData();
   }, [currentUser]);
 
@@ -87,9 +179,22 @@ const Dashboard = () => {
 
   return (
     <div className="container mx-auto pt-20">
-      <header className="mb-6">
-        <h1 className="text-3xl font-bold">Welcome, {currentUser?.displayName?.split(' ')[0]}!</h1>
-        <p className="text-muted-foreground">Monitor and manage your campus issues reports</p>
+      <header className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Welcome, {currentUser?.displayName?.split(' ')[0]}!</h1>
+          <p className="text-muted-foreground">Monitor and manage your campus issues reports</p>
+        </div>
+        
+        {hasNewNotifications && (
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2"
+            onClick={() => setHasNewNotifications(false)}
+          >
+            <BellRing className="h-4 w-4 text-red-500" />
+            <span>New Updates</span>
+          </Button>
+        )}
       </header>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
