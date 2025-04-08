@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -10,20 +9,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Camera, MapPin, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import { createClient } from '@supabase/supabase-js';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-
-// Get environment variables
-const supabaseUrl = 'https://xfvtqlacvgngyhnwcort.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-// Create Supabase client only if both URL and key are available
-let supabase: any = null;
-const isMissingSupabaseConfig = !supabaseUrl || !supabaseAnonKey;
-
-if (!isMissingSupabaseConfig) {
-  supabase = createClient(supabaseUrl, supabaseAnonKey);
-}
+import supabase, { isSupabaseConfigured } from '@/lib/supabase';
 
 const categories = [
   { value: 'parking', label: 'Parking Issue' },
@@ -48,10 +35,10 @@ const ReportForm = () => {
 
   // Check Supabase configuration on component mount
   useEffect(() => {
-    if (isMissingSupabaseConfig) {
+    if (!isSupabaseConfigured) {
       toast({
         title: "Configuration Error",
-        description: "Supabase configuration is missing. Please contact the administrator.",
+        description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
         variant: "destructive",
       });
     }
@@ -91,8 +78,8 @@ const ReportForm = () => {
     input.click();
   };
 
-  const sendNotificationToAdmin = async (reportId: string, reportInfo: any) => {
-    if (isMissingSupabaseConfig) return;
+  const sendNotificationToAdmin = async (reportId: string, report: any) => {
+    if (!isSupabaseConfigured) return;
     
     try {
       // Save notification to Supabase
@@ -103,10 +90,10 @@ const ReportForm = () => {
             recipient: 'admin',
             type: 'new_report',
             read: false,
-            title: `New report: ${reportInfo.title}`,
-            content: `A new report has been submitted by ${reportInfo.reporter_name}`,
+            title: `New report: ${report.title}`,
+            content: `A new report has been submitted by ${report.reporter_name}`,
             report_id: reportId,
-            user_id: reportInfo.reported_by
+            user_id: report.reported_by
           }
         ]);
         
@@ -121,10 +108,10 @@ const ReportForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (isMissingSupabaseConfig) {
+    if (!isSupabaseConfigured) {
       toast({
         title: "Configuration Error",
-        description: "Supabase configuration is missing. Please contact the administrator.",
+        description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
         variant: "destructive",
       });
       return;

@@ -9,11 +9,7 @@ import { Search, Filter, User, MailIcon, Bell } from 'lucide-react';
 import ReportList from '@/components/reports/ReportList';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = 'https://xfvtqlacvgngyhnwcort.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import supabase, { isSupabaseConfigured } from '@/lib/supabase';
 
 interface Notification {
   id: string;
@@ -49,6 +45,15 @@ const AdminReportList = () => {
       return;
     }
     
+    if (!isSupabaseConfigured) {
+      toast({
+        title: "Configuration Error",
+        description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
     fetchNotifications();
     
     // Set up real-time subscription
@@ -70,7 +75,7 @@ const AdminReportList = () => {
   }, [currentUser, navigate, toast, isAdmin]);
 
   const fetchNotifications = async () => {
-    if (!isAdmin) return;
+    if (!isAdmin || !isSupabaseConfigured) return;
     
     try {
       const { data, error } = await supabase

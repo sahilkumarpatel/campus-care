@@ -6,11 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, FilterX } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
-const supabaseUrl = 'https://xfvtqlacvgngyhnwcort.supabase.co';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import supabase, { isSupabaseConfigured } from '@/lib/supabase';
 
 interface ReportListProps {
   isAdminView?: boolean;
@@ -38,6 +34,12 @@ const ReportList: React.FC<ReportListProps> = ({
 
   // Subscribe to real-time changes
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setError('Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.');
+      setLoading(false);
+      return;
+    }
+
     const channel = supabase
       .channel('reports_channel')
       .on('postgres_changes', { 
@@ -55,6 +57,12 @@ const ReportList: React.FC<ReportListProps> = ({
   }, []);
 
   const fetchReports = async () => {
+    if (!isSupabaseConfigured) {
+      setError('Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       
