@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,14 +7,23 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, MapPin } from 'lucide-react';
+import { Camera, MapPin, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { createClient } from '@supabase/supabase-js';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Get environment variables
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// Create Supabase client only if both URL and key are available
+let supabase: any = null;
+const isMissingSupabaseConfig = !supabaseUrl || !supabaseAnonKey;
+
+if (!isMissingSupabaseConfig) {
+  supabase = createClient(supabaseUrl, supabaseAnonKey);
+}
 
 const categories = [
   { value: 'parking', label: 'Parking Issue' },
@@ -36,6 +45,17 @@ const ReportForm = () => {
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check Supabase configuration on component mount
+  useEffect(() => {
+    if (isMissingSupabaseConfig) {
+      toast({
+        title: "Configuration Error",
+        description: "Supabase configuration is missing. Please contact the administrator.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -72,6 +92,8 @@ const ReportForm = () => {
   };
 
   const sendNotificationToAdmin = async (reportId: string, reportInfo: any) => {
+    if (isMissingSupabaseConfig) return;
+    
     try {
       // Save notification to Supabase
       const { data, error } = await supabase
@@ -98,6 +120,15 @@ const ReportForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isMissingSupabaseConfig) {
+      toast({
+        title: "Configuration Error",
+        description: "Supabase configuration is missing. Please contact the administrator.",
+        variant: "destructive",
+      });
+      return;
+    }
     
     if (!title || !description || !category || !location) {
       toast({
@@ -193,6 +224,16 @@ const ReportForm = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {isMissingSupabaseConfig && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Configuration Error</AlertTitle>
+              <AlertDescription>
+                Supabase configuration is missing. Please contact the administrator to set up the required environment variables.
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="title">Issue Title</Label>
@@ -202,12 +243,18 @@ const ReportForm = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
+                disabled={isMissingSupabaseConfig}
               />
             </div>
             
             <div className="space-y-2">
               <Label>Category</Label>
-              <RadioGroup value={category} onValueChange={setCategory} className="grid grid-cols-2 gap-2">
+              <RadioGroup 
+                value={category} 
+                onValueChange={setCategory} 
+                className="grid grid-cols-2 gap-2"
+                disabled={isMissingSupabaseConfig}
+              >
                 {categories.map((cat) => (
                   <div key={cat.value} className="flex items-center space-x-2">
                     <RadioGroupItem value={cat.value} id={cat.value} />
@@ -226,6 +273,7 @@ const ReportForm = () => {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
+                disabled={isMissingSupabaseConfig}
               />
             </div>
             
@@ -239,8 +287,14 @@ const ReportForm = () => {
                   onChange={(e) => setLocation(e.target.value)}
                   required
                   className="flex-1"
+                  disabled={isMissingSupabaseConfig}
                 />
-                <Button type="button" variant="outline" className="ml-2">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="ml-2"
+                  disabled={isMissingSupabaseConfig}
+                >
                   <MapPin className="h-4 w-4 mr-2" />
                   Map
                 </Button>
@@ -249,15 +303,16 @@ const ReportForm = () => {
             
             <div className="space-y-2">
               <Label htmlFor="image">Attach Photo (Optional)</Label>
-              <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-6 cursor-pointer hover:border-primary transition-colors">
+              <div className={`flex flex-col items-center justify-center border-2 border-dashed ${isMissingSupabaseConfig ? 'border-gray-200' : 'border-gray-300'} rounded-lg p-6 cursor-pointer hover:border-primary transition-colors ${isMissingSupabaseConfig ? 'opacity-60' : ''}`}>
                 <input
                   type="file"
                   id="image"
                   accept="image/*"
                   onChange={handleImageChange}
                   className="hidden"
+                  disabled={isMissingSupabaseConfig}
                 />
-                <label htmlFor="image" className="cursor-pointer">
+                <label htmlFor="image" className={`cursor-pointer ${isMissingSupabaseConfig ? 'cursor-not-allowed' : ''}`}>
                   {imagePreview ? (
                     <img 
                       src={imagePreview} 
@@ -278,6 +333,7 @@ const ReportForm = () => {
                   variant="outline" 
                   onClick={takePicture}
                   className="flex items-center"
+                  disabled={isMissingSupabaseConfig}
                 >
                   <Camera className="h-4 w-4 mr-2" />
                   Take Photo
@@ -296,7 +352,7 @@ const ReportForm = () => {
               <Button 
                 type="submit" 
                 className="bg-campus-primary hover:bg-campus-primary/90"
-                disabled={isSubmitting}
+                disabled={isSubmitting || isMissingSupabaseConfig}
               >
                 {isSubmitting ? "Submitting..." : "Submit Report"}
               </Button>
