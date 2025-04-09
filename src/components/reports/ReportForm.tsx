@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Camera, MapPin, AlertCircle, ShieldAlert, Info } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import supabase, { isSupabaseConfigured } from '@/lib/supabase';
@@ -35,6 +35,7 @@ const ReportForm = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rlsError, setRlsError] = useState(false);
   const [tableError, setTableError] = useState(false);
+  const [storageError, setStorageError] = useState(false);
 
   const isMissingSupabaseConfig = !isSupabaseConfigured;
 
@@ -48,27 +49,32 @@ const ReportForm = () => {
     }
   }, [toast, isMissingSupabaseConfig]);
 
-  // Check if tables exist on component mount
+  // Check if bucket exists on component mount
   useEffect(() => {
-    const checkTablesExist = async () => {
+    const checkBucketExists = async () => {
       try {
-        // Check if the reports table exists
-        const { count, error } = await supabase
-          .from('reports')
-          .select('*', { count: 'exact', head: true });
+        const { data: buckets, error } = await supabase
+          .storage
+          .listBuckets();
         
-        if (error && error.message.includes('relation "reports" does not exist')) {
-          setTableError(true);
+        const bucketExists = buckets?.some(bucket => bucket.name === 'report123');
+        if (!bucketExists) {
+          setStorageError(true);
+          toast({
+            title: "Storage Error",
+            description: "The 'report123' storage bucket does not exist.",
+            variant: "destructive",
+          });
         }
       } catch (error) {
-        console.error('Error checking tables:', error);
+        console.error('Error checking bucket:', error);
       }
     };
 
     if (isSupabaseConfigured) {
-      checkTablesExist();
+      checkBucketExists();
     }
-  }, []);
+  }, [toast]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -108,15 +114,6 @@ const ReportForm = () => {
     
     try {
       // First check if notifications table exists
-      const { error: checkError } = await supabase
-        .from('notifications')
-        .select('*', { count: 'exact', head: true });
-      
-      if (checkError && checkError.message.includes('relation "notifications" does not exist')) {
-        console.error('Notifications table does not exist');
-        return;
-      }
-      
       const { data, error } = await supabase
         .from('notifications')
         .insert([
@@ -133,6 +130,11 @@ const ReportForm = () => {
         
       if (error) {
         console.error('Error sending notification:', error);
+        if (error.message.includes('relation "notifications" does not exist')) {
+          console.warn('Notifications table does not exist. Skipping notification.');
+        }
+      } else {
+        console.log('Notification sent to admin');
       }
     } catch (error) {
       console.error('Failed to send admin notification:', error);
@@ -142,11 +144,13 @@ const ReportForm = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setRlsError(false);
+    setTableError(false);
+    setStorageError(false);
     
     if (isMissingSupabaseConfig) {
       toast({
         title: "Configuration Error",
-        description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
+        description: "Supabase API key is missing.",
         variant: "destructive",
       });
       return;
@@ -176,6 +180,7 @@ const ReportForm = () => {
         if (uploadError) {
           console.error('Error uploading image:', uploadError);
           if (uploadError.message.includes('bucket not found')) {
+            setStorageError(true);
             toast({
               title: "Storage Error",
               description: "The storage bucket 'report123' does not exist. Please create it in your Supabase dashboard.",
@@ -193,6 +198,13 @@ const ReportForm = () => {
           .getPublicUrl(`reports/${currentUser?.uid || 'anonymous'}/${fileName}`);
           
         imageUrl = publicUrl;
+      }
+      
+      // Create a session with the current user's auth token to properly authenticate with Supabase
+      const session = supabase.auth.session();
+      if (!session && currentUser) {
+        // If no Supabase session but Firebase user exists, create an anonymous Supabase user
+        await supabase.auth.signIn({ email: currentUser.email });
       }
       
       const newReport = {
@@ -220,7 +232,7 @@ const ReportForm = () => {
         // Table doesn't exist error
         if (reportError.message && reportError.message.includes('relation "reports" does not exist')) {
           setTableError(true);
-          throw new Error('The reports table does not exist in the database. Please create it in your Supabase dashboard.');
+          throw new Error('The reports table does not exist in the database.');
         }
         
         // Row-Level Security policy error
@@ -229,7 +241,7 @@ const ReportForm = () => {
             reportError.message.includes('new row violates row-level security')
           )) {
           setRlsError(true);
-          throw new Error('Permission denied: Row-level security policy violation. Contact administrator to set up proper permissions.');
+          throw new Error('Permission denied: Row-level security policy violation.');
         }
         
         throw reportError;
@@ -313,6 +325,23 @@ const ReportForm = () => {
             </Alert>
           )}
           
+          {storageError && (
+            <Alert variant="destructive" className="mb-6">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Storage Error</AlertTitle>
+              <AlertDescription>
+                <p>The required storage bucket 'report123' doesn't exist. To fix this:</p>
+                <ol className="list-decimal ml-5 mt-2 space-y-1">
+                  <li>Go to your Supabase dashboard</li>
+                  <li>Navigate to the Storage section</li>
+                  <li>Click "Create a new bucket"</li>
+                  <li>Name it exactly "report123"</li>
+                  <li>Set the access to "Public" if you want images to be publicly accessible</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+          )}
+          
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="title">Issue Title</Label>
@@ -322,7 +351,7 @@ const ReportForm = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                disabled={isMissingSupabaseConfig || tableError || rlsError}
+                disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
               />
             </div>
             
@@ -332,7 +361,7 @@ const ReportForm = () => {
                 value={category} 
                 onValueChange={setCategory} 
                 className="grid grid-cols-2 gap-2"
-                disabled={isMissingSupabaseConfig || tableError || rlsError}
+                disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
               >
                 {categories.map((cat) => (
                   <div key={cat.value} className="flex items-center space-x-2">
@@ -352,7 +381,7 @@ const ReportForm = () => {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
-                disabled={isMissingSupabaseConfig || tableError || rlsError}
+                disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
               />
             </div>
             
@@ -366,13 +395,13 @@ const ReportForm = () => {
                   onChange={(e) => setLocation(e.target.value)}
                   required
                   className="flex-1"
-                  disabled={isMissingSupabaseConfig || tableError || rlsError}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
                 />
                 <Button 
                   type="button" 
                   variant="outline" 
                   className="ml-2"
-                  disabled={isMissingSupabaseConfig || tableError || rlsError}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
                   Map
@@ -382,16 +411,16 @@ const ReportForm = () => {
             
             <div className="space-y-2">
               <Label htmlFor="image">Attach Photo (Optional)</Label>
-              <div className={`flex flex-col items-center justify-center border-2 border-dashed ${isMissingSupabaseConfig || tableError || rlsError ? 'border-gray-200' : 'border-gray-300'} rounded-lg p-6 cursor-pointer hover:border-primary transition-colors ${isMissingSupabaseConfig || tableError || rlsError ? 'opacity-60' : ''}`}>
+              <div className={`flex flex-col items-center justify-center border-2 border-dashed ${isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting ? 'border-gray-200' : 'border-gray-300'} rounded-lg p-6 cursor-pointer hover:border-primary transition-colors ${isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting ? 'opacity-60' : ''}`}>
                 <input
                   type="file"
                   id="image"
                   accept="image/*"
                   onChange={handleImageChange}
                   className="hidden"
-                  disabled={isMissingSupabaseConfig || tableError || rlsError}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
                 />
-                <label htmlFor="image" className={`cursor-pointer ${isMissingSupabaseConfig || tableError || rlsError ? 'cursor-not-allowed' : ''}`}>
+                <label htmlFor="image" className={`cursor-pointer ${isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting ? 'cursor-not-allowed' : ''}`}>
                   {imagePreview ? (
                     <img 
                       src={imagePreview} 
@@ -412,7 +441,7 @@ const ReportForm = () => {
                   variant="outline" 
                   onClick={takePicture}
                   className="flex items-center"
-                  disabled={isMissingSupabaseConfig || tableError || rlsError}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError || storageError || isSubmitting}
                 >
                   <Camera className="h-4 w-4 mr-2" />
                   Take Photo
@@ -425,13 +454,14 @@ const ReportForm = () => {
                 type="button"
                 variant="outline"
                 onClick={() => navigate('/dashboard')}
+                disabled={isSubmitting}
               >
                 Cancel
               </Button>
               <Button 
                 type="submit" 
                 className="bg-campus-primary hover:bg-campus-primary/90"
-                disabled={isSubmitting || isMissingSupabaseConfig || tableError || rlsError}
+                disabled={isSubmitting || isMissingSupabaseConfig || tableError || rlsError || storageError}
               >
                 {isSubmitting ? "Submitting..." : "Submit Report"}
               </Button>
