@@ -200,11 +200,16 @@ const ReportForm = () => {
         imageUrl = publicUrl;
       }
       
-      // Create a session with the current user's auth token to properly authenticate with Supabase
-      const session = supabase.auth.session();
-      if (!session && currentUser) {
-        // If no Supabase session but Firebase user exists, create an anonymous Supabase user
-        await supabase.auth.signIn({ email: currentUser.email });
+      // Using the current Supabase API
+      // We can't check for a session this way, but we can use signInAnonymously if needed
+      try {
+        if (currentUser && !await supabase.auth.getUser()) {
+          // If user exists in Firebase but not in Supabase, sign in anonymously
+          await supabase.auth.signInAnonymously();
+        }
+      } catch (authError) {
+        console.error("Auth error:", authError);
+        // Continue without authentication - relying on RLS policies for public access
       }
       
       const newReport = {
