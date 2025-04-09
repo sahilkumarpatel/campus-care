@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, MapPin, AlertCircle, ShieldAlert } from 'lucide-react';
+import { Camera, MapPin, AlertCircle, ShieldAlert, Info } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -34,6 +34,7 @@ const ReportForm = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rlsError, setRlsError] = useState(false);
+  const [tableError, setTableError] = useState(false);
 
   const isMissingSupabaseConfig = !isSupabaseConfigured;
 
@@ -46,6 +47,28 @@ const ReportForm = () => {
       });
     }
   }, [toast, isMissingSupabaseConfig]);
+
+  // Check if tables exist on component mount
+  useEffect(() => {
+    const checkTablesExist = async () => {
+      try {
+        // Check if the reports table exists
+        const { count, error } = await supabase
+          .from('reports')
+          .select('*', { count: 'exact', head: true });
+        
+        if (error && error.message.includes('relation "reports" does not exist')) {
+          setTableError(true);
+        }
+      } catch (error) {
+        console.error('Error checking tables:', error);
+      }
+    };
+
+    if (isSupabaseConfigured) {
+      checkTablesExist();
+    }
+  }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -84,6 +107,16 @@ const ReportForm = () => {
     if (isMissingSupabaseConfig) return;
     
     try {
+      // First check if notifications table exists
+      const { error: checkError } = await supabase
+        .from('notifications')
+        .select('*', { count: 'exact', head: true });
+      
+      if (checkError && checkError.message.includes('relation "notifications" does not exist')) {
+        console.error('Notifications table does not exist');
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('notifications')
         .insert([
@@ -92,7 +125,7 @@ const ReportForm = () => {
             type: 'new_report',
             read: false,
             title: `New report: ${report.title}`,
-            content: `A new report has been submitted by ${report.reporter_name}`,
+            content: `A new report has been submitted by ${report.reporter_name || 'a user'}`,
             report_id: reportId,
             user_id: report.reported_by
           }
@@ -138,16 +171,26 @@ const ReportForm = () => {
         const { data: fileData, error: uploadError } = await supabase
           .storage
           .from('report123')
-          .upload(`reports/${currentUser?.uid}/${fileName}`, image);
+          .upload(`reports/${currentUser?.uid || 'anonymous'}/${fileName}`, image);
         
         if (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          if (uploadError.message.includes('bucket not found')) {
+            toast({
+              title: "Storage Error",
+              description: "The storage bucket 'report123' does not exist. Please create it in your Supabase dashboard.",
+              variant: "destructive",
+            });
+            setIsSubmitting(false);
+            return;
+          }
           throw uploadError;
         }
         
         const { data: { publicUrl } } = supabase
           .storage
           .from('report123')
-          .getPublicUrl(`reports/${currentUser?.uid}/${fileName}`);
+          .getPublicUrl(`reports/${currentUser?.uid || 'anonymous'}/${fileName}`);
           
         imageUrl = publicUrl;
       }
@@ -161,9 +204,9 @@ const ReportForm = () => {
         status: 'submitted',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        reported_by: currentUser?.uid,
-        reporter_name: currentUser?.displayName,
-        reporter_email: currentUser?.email,
+        reported_by: currentUser?.uid || 'anonymous',
+        reporter_name: currentUser?.displayName || 'Anonymous User',
+        reporter_email: currentUser?.email || 'no-email@example.com',
       };
       
       const { data: savedReports, error: reportError } = await supabase
@@ -172,11 +215,23 @@ const ReportForm = () => {
         .select();
       
       if (reportError) {
-        // Check if it's a Row-Level Security policy error
-        if (reportError.message && reportError.message.includes('row-level security policy')) {
+        console.error('Error inserting report:', reportError);
+        
+        // Table doesn't exist error
+        if (reportError.message && reportError.message.includes('relation "reports" does not exist')) {
+          setTableError(true);
+          throw new Error('The reports table does not exist in the database. Please create it in your Supabase dashboard.');
+        }
+        
+        // Row-Level Security policy error
+        if (reportError.message && (
+            reportError.message.includes('row-level security policy') || 
+            reportError.message.includes('new row violates row-level security')
+          )) {
           setRlsError(true);
           throw new Error('Permission denied: Row-level security policy violation. Contact administrator to set up proper permissions.');
         }
+        
         throw reportError;
       }
       
@@ -222,13 +277,38 @@ const ReportForm = () => {
             </Alert>
           )}
           
+          {tableError && (
+            <Alert variant="destructive" className="mb-6">
+              <Info className="h-4 w-4" />
+              <AlertTitle>Database Setup Required</AlertTitle>
+              <AlertDescription>
+                <p>The required database tables don't exist. Please create the following tables in your Supabase dashboard:</p>
+                <ol className="list-decimal ml-5 mt-2 space-y-1">
+                  <li><strong>reports</strong> table with columns: id, title, description, category, location, image_url, status, created_at, updated_at, reported_by, reporter_name, reporter_email</li>
+                  <li><strong>notifications</strong> table with columns: id, recipient, type, read, title, content, report_id, user_id, created_at</li>
+                </ol>
+              </AlertDescription>
+            </Alert>
+          )}
+          
           {rlsError && (
             <Alert variant="destructive" className="mb-6">
               <ShieldAlert className="h-4 w-4" />
               <AlertTitle>Permission Error</AlertTitle>
               <AlertDescription>
-                You don't have permission to submit reports. The Supabase database needs Row-Level Security (RLS) policies 
-                configured to allow insertions. Please contact the administrator to set up the proper permissions.
+                <p>You don't have permission to submit reports. The Supabase database needs Row-Level Security (RLS) policies 
+                configured to allow insertions. Please go to your Supabase dashboard and add the following RLS policy for the reports table:</p>
+                <pre className="bg-gray-100 p-2 rounded mt-2 text-xs overflow-auto">
+                  CREATE POLICY "Enable inserts for authenticated users" ON reports<br/>
+                  FOR INSERT TO authenticated, anon<br/>
+                  WITH CHECK (true);
+                </pre>
+                <p className="mt-2">Or for public access:</p>
+                <pre className="bg-gray-100 p-2 rounded mt-2 text-xs overflow-auto">
+                  CREATE POLICY "Enable public inserts" ON reports<br/>
+                  FOR INSERT TO anon<br/>
+                  WITH CHECK (true);
+                </pre>
               </AlertDescription>
             </Alert>
           )}
@@ -242,7 +322,7 @@ const ReportForm = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 required
-                disabled={isMissingSupabaseConfig}
+                disabled={isMissingSupabaseConfig || tableError || rlsError}
               />
             </div>
             
@@ -252,7 +332,7 @@ const ReportForm = () => {
                 value={category} 
                 onValueChange={setCategory} 
                 className="grid grid-cols-2 gap-2"
-                disabled={isMissingSupabaseConfig}
+                disabled={isMissingSupabaseConfig || tableError || rlsError}
               >
                 {categories.map((cat) => (
                   <div key={cat.value} className="flex items-center space-x-2">
@@ -272,7 +352,7 @@ const ReportForm = () => {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 required
-                disabled={isMissingSupabaseConfig}
+                disabled={isMissingSupabaseConfig || tableError || rlsError}
               />
             </div>
             
@@ -286,13 +366,13 @@ const ReportForm = () => {
                   onChange={(e) => setLocation(e.target.value)}
                   required
                   className="flex-1"
-                  disabled={isMissingSupabaseConfig}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError}
                 />
                 <Button 
                   type="button" 
                   variant="outline" 
                   className="ml-2"
-                  disabled={isMissingSupabaseConfig}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError}
                 >
                   <MapPin className="h-4 w-4 mr-2" />
                   Map
@@ -302,16 +382,16 @@ const ReportForm = () => {
             
             <div className="space-y-2">
               <Label htmlFor="image">Attach Photo (Optional)</Label>
-              <div className={`flex flex-col items-center justify-center border-2 border-dashed ${isMissingSupabaseConfig ? 'border-gray-200' : 'border-gray-300'} rounded-lg p-6 cursor-pointer hover:border-primary transition-colors ${isMissingSupabaseConfig ? 'opacity-60' : ''}`}>
+              <div className={`flex flex-col items-center justify-center border-2 border-dashed ${isMissingSupabaseConfig || tableError || rlsError ? 'border-gray-200' : 'border-gray-300'} rounded-lg p-6 cursor-pointer hover:border-primary transition-colors ${isMissingSupabaseConfig || tableError || rlsError ? 'opacity-60' : ''}`}>
                 <input
                   type="file"
                   id="image"
                   accept="image/*"
                   onChange={handleImageChange}
                   className="hidden"
-                  disabled={isMissingSupabaseConfig}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError}
                 />
-                <label htmlFor="image" className={`cursor-pointer ${isMissingSupabaseConfig ? 'cursor-not-allowed' : ''}`}>
+                <label htmlFor="image" className={`cursor-pointer ${isMissingSupabaseConfig || tableError || rlsError ? 'cursor-not-allowed' : ''}`}>
                   {imagePreview ? (
                     <img 
                       src={imagePreview} 
@@ -332,7 +412,7 @@ const ReportForm = () => {
                   variant="outline" 
                   onClick={takePicture}
                   className="flex items-center"
-                  disabled={isMissingSupabaseConfig}
+                  disabled={isMissingSupabaseConfig || tableError || rlsError}
                 >
                   <Camera className="h-4 w-4 mr-2" />
                   Take Photo
@@ -351,7 +431,7 @@ const ReportForm = () => {
               <Button 
                 type="submit" 
                 className="bg-campus-primary hover:bg-campus-primary/90"
-                disabled={isSubmitting || isMissingSupabaseConfig}
+                disabled={isSubmitting || isMissingSupabaseConfig || tableError || rlsError}
               >
                 {isSubmitting ? "Submitting..." : "Submit Report"}
               </Button>
