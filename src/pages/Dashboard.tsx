@@ -1,14 +1,16 @@
+
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, ClipboardList, ChevronRight, BellRing } from 'lucide-react';
+import { Plus, ClipboardList, ChevronRight, BellRing, AlertCircle } from 'lucide-react';
 import { db } from '@/lib/firebase';
 import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import ReportCard, { ReportType } from '@/components/reports/ReportCard';
 import { useToast } from '@/components/ui/use-toast';
 import supabase from '@/lib/supabase';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 const Dashboard = () => {
   const { currentUser } = useAuth();
@@ -22,6 +24,7 @@ const Dashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [hasNewNotifications, setHasNewNotifications] = useState(false);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!currentUser?.uid) return;
@@ -69,6 +72,7 @@ const Dashboard = () => {
     
     try {
       setLoading(true);
+      setSupabaseError(null);
       
       const { data: reportsData, error } = await supabase
         .from('reports')
@@ -78,6 +82,13 @@ const Dashboard = () => {
         .limit(3);
       
       if (error) {
+        if (error.code === '42P01') {
+          // Table doesn't exist error
+          setSupabaseError("The reports table does not exist in your Supabase database. Please create it.");
+          // Fall back to Firebase for now
+          fetchFromFirebase();
+          return;
+        }
         throw error;
       }
       
@@ -116,52 +127,60 @@ const Dashboard = () => {
           
           setReportCounts(counts);
         }
-      } else {
-        const reportsQuery = query(
-          collection(db, 'reports'),
-          where('reportedBy', '==', currentUser.uid),
-          orderBy('createdAt', 'desc'),
-          limit(3)
-        );
-        
-        const querySnapshot = await getDocs(reportsQuery);
-        const reports: ReportType[] = [];
-        querySnapshot.forEach((doc) => {
-          reports.push({
-            id: doc.id,
-            ...doc.data()
-          } as ReportType);
-        });
-        
-        setRecentReports(reports);
-        
-        const allReportsQuery = query(
-          collection(db, 'reports'),
-          where('reportedBy', '==', currentUser.uid)
-        );
-        
-        const allReportsSnapshot = await getDocs(allReportsQuery);
-        
-        const counts = {
-          total: allReportsSnapshot.size,
-          submitted: 0,
-          inProgress: 0,
-          resolved: 0
-        };
-        
-        allReportsSnapshot.forEach((doc) => {
-          const status = doc.data().status;
-          if (status === 'submitted') counts.submitted++;
-          else if (status === 'in-progress') counts.inProgress++;
-          else if (status === 'resolved') counts.resolved++;
-        });
-        
-        setReportCounts(counts);
-      }
+      } 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
+      // Fall back to Firebase
+      fetchFromFirebase();
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFromFirebase = async () => {
+    try {
+      const reportsQuery = query(
+        collection(db, 'reports'),
+        where('reportedBy', '==', currentUser?.uid),
+        orderBy('createdAt', 'desc'),
+        limit(3)
+      );
+      
+      const querySnapshot = await getDocs(reportsQuery);
+      const reports: ReportType[] = [];
+      querySnapshot.forEach((doc) => {
+        reports.push({
+          id: doc.id,
+          ...doc.data()
+        } as ReportType);
+      });
+      
+      setRecentReports(reports);
+      
+      const allReportsQuery = query(
+        collection(db, 'reports'),
+        where('reportedBy', '==', currentUser?.uid)
+      );
+      
+      const allReportsSnapshot = await getDocs(allReportsQuery);
+      
+      const counts = {
+        total: allReportsSnapshot.size,
+        submitted: 0,
+        inProgress: 0,
+        resolved: 0
+      };
+      
+      allReportsSnapshot.forEach((doc) => {
+        const status = doc.data().status;
+        if (status === 'submitted') counts.submitted++;
+        else if (status === 'in-progress') counts.inProgress++;
+        else if (status === 'resolved') counts.resolved++;
+      });
+      
+      setReportCounts(counts);
+    } catch (firebaseError) {
+      console.error('Error fetching from Firebase:', firebaseError);
     }
   };
 
@@ -196,6 +215,69 @@ const Dashboard = () => {
           </Button>
         )}
       </header>
+
+      {supabaseError && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Database Error</AlertTitle>
+          <AlertDescription>
+            {supabaseError}<br />
+            <span className="font-medium">Solution:</span> You need to create the necessary tables in Supabase. 
+            Go to your Supabase dashboard, select your project, go to SQL Editor, and run the following SQL:
+            <pre className="mt-2 p-2 bg-gray-800 text-white text-xs rounded overflow-auto">
+              {`CREATE TABLE reports (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  description TEXT NOT NULL,
+  category TEXT NOT NULL,
+  location TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'submitted',
+  image_url TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  reported_by TEXT NOT NULL,
+  reporter_name TEXT,
+  reporter_email TEXT
+);
+
+-- Enable RLS
+ALTER TABLE reports ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for reading reports (users can see their own reports)
+CREATE POLICY "Users can view their own reports" ON reports
+  FOR SELECT USING (auth.uid() = reported_by);
+
+-- Create policy for inserting reports (authenticated users can create reports)
+CREATE POLICY "Users can create reports" ON reports
+  FOR INSERT WITH CHECK (auth.uid() = reported_by);
+
+-- Create notifications table
+CREATE TABLE notifications (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  recipient TEXT NOT NULL,
+  type TEXT NOT NULL,
+  read BOOLEAN DEFAULT FALSE,
+  title TEXT NOT NULL,
+  content TEXT NOT NULL,
+  report_id UUID REFERENCES reports(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+-- Create policy for reading notifications
+CREATE POLICY "Users can view their own notifications" ON notifications
+  FOR SELECT USING (auth.uid() = user_id);
+  
+-- Create policy for inserting notifications
+CREATE POLICY "Users can create notifications" ON notifications
+  FOR INSERT WITH CHECK (auth.uid() = user_id);`}
+            </pre>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <Card>

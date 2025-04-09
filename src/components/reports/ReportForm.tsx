@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Camera, MapPin, AlertCircle } from 'lucide-react';
+import { Camera, MapPin, AlertCircle, ShieldAlert } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -33,6 +33,7 @@ const ReportForm = () => {
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [rlsError, setRlsError] = useState(false);
 
   const isMissingSupabaseConfig = !isSupabaseConfigured;
 
@@ -107,6 +108,7 @@ const ReportForm = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRlsError(false);
     
     if (isMissingSupabaseConfig) {
       toast({
@@ -135,7 +137,7 @@ const ReportForm = () => {
         const fileName = `${Date.now()}_${image.name}`;
         const { data: fileData, error: uploadError } = await supabase
           .storage
-          .from('report123')  // Changed from 'report_images' to 'report123'
+          .from('report123')
           .upload(`reports/${currentUser?.uid}/${fileName}`, image);
         
         if (uploadError) {
@@ -144,7 +146,7 @@ const ReportForm = () => {
         
         const { data: { publicUrl } } = supabase
           .storage
-          .from('report123')  // Changed from 'report_images' to 'report123'
+          .from('report123')
           .getPublicUrl(`reports/${currentUser?.uid}/${fileName}`);
           
         imageUrl = publicUrl;
@@ -170,6 +172,11 @@ const ReportForm = () => {
         .select();
       
       if (reportError) {
+        // Check if it's a Row-Level Security policy error
+        if (reportError.message && reportError.message.includes('row-level security policy')) {
+          setRlsError(true);
+          throw new Error('Permission denied: Row-level security policy violation. Contact administrator to set up proper permissions.');
+        }
         throw reportError;
       }
       
@@ -211,6 +218,17 @@ const ReportForm = () => {
               <AlertTitle>Configuration Error</AlertTitle>
               <AlertDescription>
                 Supabase configuration is missing. Please contact the administrator to set up the required environment variables.
+              </AlertDescription>
+            </Alert>
+          )}
+          
+          {rlsError && (
+            <Alert variant="destructive" className="mb-6">
+              <ShieldAlert className="h-4 w-4" />
+              <AlertTitle>Permission Error</AlertTitle>
+              <AlertDescription>
+                You don't have permission to submit reports. The Supabase database needs Row-Level Security (RLS) policies 
+                configured to allow insertions. Please contact the administrator to set up the proper permissions.
               </AlertDescription>
             </Alert>
           )}
