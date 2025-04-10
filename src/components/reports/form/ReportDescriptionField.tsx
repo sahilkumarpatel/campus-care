@@ -7,25 +7,32 @@ interface ReportDescriptionFieldProps {
   description: string;
   setDescription: (description: string) => void;
   disabled: boolean;
+  error?: string;
 }
 
 export const ReportDescriptionField: React.FC<ReportDescriptionFieldProps> = ({
   description,
   setDescription,
-  disabled
+  disabled,
+  error
 }) => {
   return (
     <div className="space-y-2">
-      <Label htmlFor="description">Description</Label>
+      <Label htmlFor="description" className="flex items-center">
+        Description <span className="text-red-500 ml-1">*</span>
+      </Label>
       <Textarea
         id="description"
-        placeholder="Detailed description of the issue..."
-        rows={4}
+        placeholder="Provide details about the issue..."
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        required
+        rows={4}
         disabled={disabled}
+        className={error ? "border-red-500" : ""}
       />
+      {error && (
+        <p className="text-sm font-medium text-red-500">{error}</p>
+      )}
     </div>
   );
 };
