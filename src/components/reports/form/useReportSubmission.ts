@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
-import supabase, { isSupabaseConfigured } from '@/lib/supabase';
+import { supabase } from '@/integrations/supabase/client';
 
 export const useReportSubmission = () => {
   const { currentUser } = useAuth();
@@ -22,69 +22,54 @@ export const useReportSubmission = () => {
   const [storageError, setStorageError] = useState(false);
   const [bucketChecked, setBucketChecked] = useState(false);
 
-  const isMissingSupabaseConfig = !isSupabaseConfigured;
-
   // Check if bucket exists on component mount
   useEffect(() => {
-    const checkBucketExists = async () => {
-      if (!isSupabaseConfigured || bucketChecked) return;
-      
-      try {
-        console.log('Checking if report123 bucket exists...');
-        const { data: buckets, error } = await supabase
-          .storage
-          .listBuckets();
-        
-        if (error) {
-          console.error('Error listing buckets:', error);
-          return;
-        }
-        
-        console.log('Available buckets:', buckets);
-        const bucketExists = buckets?.some(bucket => bucket.name === 'report123');
-        
-        setStorageError(!bucketExists);
-        setBucketChecked(true);
-        
-        if (!bucketExists) {
-          toast({
-            title: "Storage Error",
-            description: "The 'report123' storage bucket does not exist.",
-            variant: "destructive",
-          });
-        } else {
-          console.log('report123 bucket exists!');
-        }
-      } catch (error) {
-        console.error('Error checking bucket:', error);
-      }
-    };
-
-    if (isSupabaseConfigured) {
-      checkBucketExists();
-    }
-  }, [toast, isSupabaseConfigured, bucketChecked]);
+    checkBucketExists();
+  }, []);
   
-  // Check Supabase configuration
-  useEffect(() => {
-    if (isMissingSupabaseConfig) {
-      toast({
-        title: "Configuration Error",
-        description: "Supabase API key is missing. Please set the VITE_SUPABASE_ANON_KEY environment variable.",
-        variant: "destructive",
-      });
+  // Function to check if the bucket exists
+  const checkBucketExists = async () => {
+    try {
+      console.log('Checking if report123 bucket exists...');
+      const { data: buckets, error } = await supabase
+        .storage
+        .listBuckets();
+      
+      if (error) {
+        console.error('Error listing buckets:', error);
+        return;
+      }
+      
+      console.log('Available buckets:', buckets);
+      const bucketExists = buckets?.some(bucket => bucket.name === 'report123');
+      
+      setStorageError(!bucketExists);
+      setBucketChecked(true);
+      
+      if (!bucketExists) {
+        toast({
+          title: "Storage Error",
+          description: "The 'report123' storage bucket does not exist.",
+          variant: "destructive",
+        });
+      } else {
+        console.log('report123 bucket exists!');
+        // Clear any previous storage error
+        setStorageError(false);
+      }
+    } catch (error) {
+      console.error('Error checking bucket:', error);
     }
-  }, [toast, isMissingSupabaseConfig]);
-
+  };
+  
   // Function to manually refresh bucket check
   const refreshBucketCheck = async () => {
     setBucketChecked(false);
     setStorageError(false);
+    await checkBucketExists();
   };
 
   const sendNotificationToAdmin = async (reportId: string, report: any) => {
-    if (isMissingSupabaseConfig) return;
-    
     try {
       // First check if notifications table exists
       const { data, error } = await supabase
@@ -118,15 +103,6 @@ export const useReportSubmission = () => {
     e.preventDefault();
     setRlsError(false);
     setTableError(false);
-    
-    if (isMissingSupabaseConfig) {
-      toast({
-        title: "Configuration Error",
-        description: "Supabase API key is missing.",
-        variant: "destructive",
-      });
-      return;
-    }
     
     if (!title || !description || !category || !location) {
       toast({
@@ -284,7 +260,6 @@ export const useReportSubmission = () => {
     rlsError,
     tableError,
     storageError,
-    isMissingSupabaseConfig,
     handleSubmit,
     refreshBucketCheck
   };

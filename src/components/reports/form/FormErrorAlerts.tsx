@@ -72,14 +72,8 @@ export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Storage Error</AlertTitle>
           <AlertDescription>
-            <p>The required storage bucket 'report123' doesn't exist. To fix this:</p>
-            <ol className="list-decimal ml-5 mt-2 space-y-1">
-              <li>Go to your Supabase dashboard</li>
-              <li>Navigate to the Storage section</li>
-              <li>Click "Create a new bucket"</li>
-              <li>Name it exactly "report123"</li>
-              <li>Set the access to "Public" if you want images to be publicly accessible</li>
-            </ol>
+            <p>Unable to access the storage bucket 'report123'. If you've already created it, click the refresh button below:</p>
+            
             {onRefreshBucketCheck && (
               <Button 
                 variant="outline"
@@ -88,7 +82,7 @@ export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
                 onClick={onRefreshBucketCheck}
               >
                 <RefreshCw className="h-3 w-3" />
-                I've created the bucket, refresh now
+                Refresh Bucket Check
               </Button>
             )}
           </AlertDescription>
