@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
@@ -24,21 +24,36 @@ export const useReportSubmission = () => {
   const [bucketChecked, setBucketChecked] = useState(false);
   const [isMissingSupabaseConfig, setIsMissingSupabaseConfig] = useState(!isSupabaseConfigured);
 
-  // Check if bucket exists on component mount
-  useEffect(() => {
-    checkBucketExists();
-  }, []);
-  
-  // Function to check if the bucket exists
-  const checkBucketExists = async () => {
+  // Function to check if the bucket exists - using useCallback to prevent recreating the function on each render
+  const checkBucketExists = useCallback(async () => {
+    if (!isSupabaseConfigured) return;
+    
     try {
       console.log('Checking if report123 bucket exists...');
+      setBucketChecked(false);
+      
+      // First try direct access to the bucket
+      const { data: objects, error: objectsError } = await supabase
+        .storage
+        .from('report123')
+        .list('', { limit: 1 });
+      
+      if (!objectsError) {
+        console.log('Successfully accessed report123 bucket');
+        setStorageError(false);
+        setBucketChecked(true);
+        return;
+      }
+      
+      // Fallback to listing all buckets
       const { data: buckets, error } = await supabase
         .storage
         .listBuckets();
       
       if (error) {
         console.error('Error listing buckets:', error);
+        setStorageError(true);
+        setBucketChecked(true);
         return;
       }
       
@@ -61,13 +76,24 @@ export const useReportSubmission = () => {
       }
     } catch (error) {
       console.error('Error checking bucket:', error);
+      setStorageError(true);
+      setBucketChecked(true);
     }
-  };
+  }, [toast, isSupabaseConfigured]);
+  
+  // Check if bucket exists on component mount
+  useEffect(() => {
+    checkBucketExists();
+  }, [checkBucketExists]);
   
   // Function to manually refresh bucket check
   const refreshBucketCheck = async () => {
     setBucketChecked(false);
-    setStorageError(false);
+    setStorageError(true); // Set to true initially, will be updated in checkBucketExists
+    toast({
+      title: "Checking storage bucket",
+      description: "Verifying access to the report123 bucket...",
+    });
     await checkBucketExists();
   };
 
@@ -115,12 +141,26 @@ export const useReportSubmission = () => {
       return;
     }
 
-    // Force refresh bucket check before submission if it was previously showing an error
+    // If bucket hasn't been checked yet, check it before proceeding
+    if (!bucketChecked) {
+      await checkBucketExists();
+    }
+    
+    // If still has storage error after check, try one more time
     if (storageError) {
+      toast({
+        title: "Verifying storage access",
+        description: "Checking access to the storage bucket before submission...",
+      });
       await refreshBucketCheck();
       
       // If still has error after refresh, prevent submission
       if (storageError) {
+        toast({
+          title: "Storage Access Failed",
+          description: "Cannot access the storage bucket. Please verify it exists in your Supabase dashboard.",
+          variant: "destructive",
+        });
         return;
       }
     }
