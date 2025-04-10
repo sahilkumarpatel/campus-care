@@ -20,25 +20,40 @@ export const useReportSubmission = () => {
   const [rlsError, setRlsError] = useState(false);
   const [tableError, setTableError] = useState(false);
   const [storageError, setStorageError] = useState(false);
+  const [bucketChecked, setBucketChecked] = useState(false);
 
   const isMissingSupabaseConfig = !isSupabaseConfigured;
 
   // Check if bucket exists on component mount
   useEffect(() => {
     const checkBucketExists = async () => {
+      if (!isSupabaseConfigured || bucketChecked) return;
+      
       try {
+        console.log('Checking if report123 bucket exists...');
         const { data: buckets, error } = await supabase
           .storage
           .listBuckets();
         
+        if (error) {
+          console.error('Error listing buckets:', error);
+          return;
+        }
+        
+        console.log('Available buckets:', buckets);
         const bucketExists = buckets?.some(bucket => bucket.name === 'report123');
+        
+        setStorageError(!bucketExists);
+        setBucketChecked(true);
+        
         if (!bucketExists) {
-          setStorageError(true);
           toast({
             title: "Storage Error",
             description: "The 'report123' storage bucket does not exist.",
             variant: "destructive",
           });
+        } else {
+          console.log('report123 bucket exists!');
         }
       } catch (error) {
         console.error('Error checking bucket:', error);
@@ -48,8 +63,9 @@ export const useReportSubmission = () => {
     if (isSupabaseConfigured) {
       checkBucketExists();
     }
-  }, [toast]);
+  }, [toast, isSupabaseConfigured, bucketChecked]);
   
+  // Check Supabase configuration
   useEffect(() => {
     if (isMissingSupabaseConfig) {
       toast({
@@ -59,6 +75,12 @@ export const useReportSubmission = () => {
       });
     }
   }, [toast, isMissingSupabaseConfig]);
+
+  // Function to manually refresh bucket check
+  const refreshBucketCheck = async () => {
+    setBucketChecked(false);
+    setStorageError(false);
+  };
 
   const sendNotificationToAdmin = async (reportId: string, report: any) => {
     if (isMissingSupabaseConfig) return;
@@ -96,7 +118,6 @@ export const useReportSubmission = () => {
     e.preventDefault();
     setRlsError(false);
     setTableError(false);
-    setStorageError(false);
     
     if (isMissingSupabaseConfig) {
       toast({
@@ -116,6 +137,16 @@ export const useReportSubmission = () => {
       return;
     }
 
+    // Force refresh bucket check before submission if it was previously showing an error
+    if (storageError) {
+      await refreshBucketCheck();
+      
+      // If still has error after refresh, prevent submission
+      if (storageError) {
+        return;
+      }
+    }
+
     setIsSubmitting(true);
     
     try {
@@ -123,38 +154,48 @@ export const useReportSubmission = () => {
       
       if (image) {
         const fileName = `${Date.now()}_${image.name}`;
-        const { data: fileData, error: uploadError } = await supabase
-          .storage
-          .from('report123')
-          .upload(`reports/${currentUser?.uid || 'anonymous'}/${fileName}`, image);
+        const filePath = `reports/${currentUser?.uid || 'anonymous'}/${fileName}`;
         
-        if (uploadError) {
-          console.error('Error uploading image:', uploadError);
-          if (uploadError.message.includes('bucket not found')) {
-            setStorageError(true);
-            toast({
-              title: "Storage Error",
-              description: "The storage bucket 'report123' does not exist. Please create it in your Supabase dashboard.",
-              variant: "destructive",
-            });
-            setIsSubmitting(false);
-            return;
-          }
-          throw uploadError;
-        }
-        
-        const { data: { publicUrl } } = supabase
-          .storage
-          .from('report123')
-          .getPublicUrl(`reports/${currentUser?.uid || 'anonymous'}/${fileName}`);
+        try {
+          const { data: fileData, error: uploadError } = await supabase
+            .storage
+            .from('report123')
+            .upload(filePath, image);
           
-        imageUrl = publicUrl;
+          if (uploadError) {
+            console.error('Error uploading image:', uploadError);
+            if (uploadError.message.includes('bucket not found') || uploadError.message.includes('The resource was not found')) {
+              setStorageError(true);
+              throw new Error("Storage bucket 'report123' not found. Please create it in your Supabase dashboard.");
+            }
+            throw uploadError;
+          }
+          
+          // Get public URL only if upload succeeds
+          const { data: { publicUrl } } = supabase
+            .storage
+            .from('report123')
+            .getPublicUrl(filePath);
+            
+          imageUrl = publicUrl;
+          console.log('Image uploaded successfully:', imageUrl);
+        } catch (imageError: any) {
+          console.error('Image upload failed:', imageError);
+          toast({
+            title: "Image Upload Failed",
+            description: imageError.message || "Failed to upload image. Your report will be submitted without an image.",
+            variant: "destructive",
+          });
+          // Continue without image
+        }
       }
       
       // Using the current Supabase API
       try {
-        if (currentUser && !await supabase.auth.getUser()) {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (currentUser && !user) {
           // If user exists in Firebase but not in Supabase, sign in anonymously
+          console.log('Signing in anonymously to Supabase');
           await supabase.auth.signInAnonymously();
         }
       } catch (authError) {
@@ -176,6 +217,7 @@ export const useReportSubmission = () => {
         reporter_email: currentUser?.email || 'no-email@example.com',
       };
       
+      console.log('Submitting report:', newReport);
       const { data: savedReports, error: reportError } = await supabase
         .from('reports')
         .insert([newReport])
@@ -204,6 +246,7 @@ export const useReportSubmission = () => {
       
       if (savedReports && savedReports.length > 0) {
         await sendNotificationToAdmin(savedReports[0].id, savedReports[0]);
+        console.log('Report saved successfully:', savedReports[0]);
       }
       
       toast({
@@ -242,6 +285,7 @@ export const useReportSubmission = () => {
     tableError,
     storageError,
     isMissingSupabaseConfig,
-    handleSubmit
+    handleSubmit,
+    refreshBucketCheck
   };
 };

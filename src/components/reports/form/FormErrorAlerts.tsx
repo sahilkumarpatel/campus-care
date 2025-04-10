@@ -1,20 +1,23 @@
 
 import React from 'react';
-import { AlertCircle, Info, ShieldAlert } from 'lucide-react';
+import { AlertCircle, Info, ShieldAlert, RefreshCw } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 
 interface FormErrorAlertsProps {
   isMissingSupabaseConfig: boolean;
   tableError: boolean;
   rlsError: boolean;
   storageError: boolean;
+  onRefreshBucketCheck?: () => void;
 }
 
 export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
   isMissingSupabaseConfig,
   tableError,
   rlsError,
-  storageError
+  storageError,
+  onRefreshBucketCheck
 }) => {
   return (
     <>
@@ -77,6 +80,17 @@ export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
               <li>Name it exactly "report123"</li>
               <li>Set the access to "Public" if you want images to be publicly accessible</li>
             </ol>
+            {onRefreshBucketCheck && (
+              <Button 
+                variant="outline"
+                size="sm"
+                className="mt-2 flex items-center gap-1"
+                onClick={onRefreshBucketCheck}
+              >
+                <RefreshCw className="h-3 w-3" />
+                I've created the bucket, refresh now
+              </Button>
+            )}
           </AlertDescription>
         </Alert>
       )}

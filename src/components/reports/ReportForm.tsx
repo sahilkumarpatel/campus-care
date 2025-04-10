@@ -31,7 +31,8 @@ const ReportForm = () => {
     tableError,
     storageError,
     isMissingSupabaseConfig,
-    handleSubmit
+    handleSubmit,
+    refreshBucketCheck
   } = useReportSubmission();
 
   // Determine if form fields should be disabled
@@ -52,6 +53,7 @@ const ReportForm = () => {
             tableError={tableError}
             rlsError={rlsError}
             storageError={storageError}
+            onRefreshBucketCheck={refreshBucketCheck}
           />
           
           <form onSubmit={handleSubmit} className="space-y-6">
