@@ -1,12 +1,20 @@
 
-import React from 'react';
-import { Outlet, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Outlet, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
 
 const AppLayout = () => {
-  const { currentUser, loading } = useAuth();
+  const { currentUser, loading, isAdmin } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect admin users to admin dashboard
+  useEffect(() => {
+    if (currentUser && isAdmin && location.pathname === '/dashboard') {
+      navigate('/admin');
+    }
+  }, [currentUser, isAdmin, navigate]);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen">

@@ -13,10 +13,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) => {
   const location = useLocation();
-  const { currentUser } = useAuth();
-  
-  // Check if user is admin
-  const isAdmin = currentUser?.email === 'admin@pccoepune.org';
+  const { currentUser, isAdmin } = useAuth();
 
   const isActive = (path: string) => {
     return location.pathname === path;
@@ -86,37 +83,40 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
       isMobile ? "w-full" : "w-64 pt-16"
     )}>
       <div className="flex flex-col overflow-y-auto flex-1 px-3 py-4">
-        <div className="mb-6">
-          <h2 className="mb-2 px-4 text-xs font-semibold text-gray-500 uppercase">
-            Main
-          </h2>
-          <nav className="flex flex-col space-y-1">
-            {navItems.map((item) => (
-              <Link 
-                key={item.path} 
-                to={item.path}
-                onClick={handleNavClick}
-              >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className={cn(
-                    "w-full justify-start",
-                    isActive(item.path)
-                      ? "bg-campus-primary text-white hover:bg-campus-primary/90 hover:text-white"
-                      : "hover:bg-campus-light hover:text-campus-primary"
-                  )}
+        {/* Only show regular user navigation items if user is not an admin */}
+        {!isAdmin && (
+          <div className="mb-6">
+            <h2 className="mb-2 px-4 text-xs font-semibold text-gray-500 uppercase">
+              Main
+            </h2>
+            <nav className="flex flex-col space-y-1">
+              {navItems.map((item) => (
+                <Link 
+                  key={item.path} 
+                  to={item.path}
+                  onClick={handleNavClick}
                 >
-                  {item.icon}
-                  {item.name}
-                  {isActive(item.path) && (
-                    <ChevronRight className="ml-auto h-4 w-4" />
-                  )}
-                </Button>
-              </Link>
-            ))}
-          </nav>
-        </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className={cn(
+                      "w-full justify-start",
+                      isActive(item.path)
+                        ? "bg-campus-primary text-white hover:bg-campus-primary/90 hover:text-white"
+                        : "hover:bg-campus-light hover:text-campus-primary"
+                    )}
+                  >
+                    {item.icon}
+                    {item.name}
+                    {isActive(item.path) && (
+                      <ChevronRight className="ml-auto h-4 w-4" />
+                    )}
+                  </Button>
+                </Link>
+              ))}
+            </nav>
+          </div>
+        )}
 
         {isAdmin && (
           <div className="mb-6">
