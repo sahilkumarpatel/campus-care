@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 export const useReportSubmission = () => {
   const { currentUser } = useAuth();
@@ -21,6 +22,7 @@ export const useReportSubmission = () => {
   const [tableError, setTableError] = useState(false);
   const [storageError, setStorageError] = useState(false);
   const [bucketChecked, setBucketChecked] = useState(false);
+  const [isMissingSupabaseConfig, setIsMissingSupabaseConfig] = useState(!isSupabaseConfigured);
 
   // Check if bucket exists on component mount
   useEffect(() => {
@@ -260,6 +262,7 @@ export const useReportSubmission = () => {
     rlsError,
     tableError,
     storageError,
+    isMissingSupabaseConfig,
     handleSubmit,
     refreshBucketCheck
   };
