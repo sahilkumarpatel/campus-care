@@ -75,7 +75,7 @@ export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Storage Error</AlertTitle>
           <AlertDescription>
-            <p>Unable to access the storage bucket 'report123'. If you've already created it in Supabase, click the button below:</p>
+            <p>Unable to access the storage bucket 'report123'. This could be due to permissions or the bucket not being properly configured.</p>
             
             {onRefreshBucketCheck && (
               <div className="mt-3 flex gap-2">
@@ -96,7 +96,7 @@ export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
                   onClick={() => setShowSupabaseHelp(true)}
                 >
                   <Info className="h-3 w-3" />
-                  Bucket Setup Help
+                  Storage Setup Help
                 </Button>
               </div>
             )}
@@ -112,16 +112,22 @@ export const FormErrorAlerts: React.FC<FormErrorAlertsProps> = ({
           <DialogDescription>
             <p className="mb-3">To correctly set up the storage bucket in Supabase:</p>
             <ol className="list-decimal ml-5 space-y-2">
-              <li>Go to your Supabase dashboard</li>
-              <li>Navigate to Storage section</li>
-              <li>Click "Create new bucket"</li>
-              <li>Enter <strong>report123</strong> as the bucket name (exactly as shown)</li>
-              <li>Make sure "Public bucket" is checked if you want the uploads to be publicly accessible</li>
-              <li>Click "Create bucket"</li>
-              <li>Then come back and click "Refresh Bucket Check"</li>
+              <li>Go to your Supabase dashboard → Storage</li>
+              <li>Check if the <strong>report123</strong> bucket already exists</li>
+              <li>If it exists but still showing errors, check the bucket's permissions:</li>
+              <li>Make sure the bucket is set as public if you want easy access</li>
+              <li>Add proper RLS policies in your Supabase dashboard for the bucket:
+                <pre className="bg-gray-100 p-2 rounded mt-2 text-xs overflow-auto mb-2">
+                  -- For public access to the bucket:
+                  CREATE POLICY "Public Access" ON storage.objects
+                  FOR ALL USING (bucket_id = 'report123');
+                </pre>
+              </li>
+              <li>If the bucket doesn't exist, create a new one named <strong>report123</strong></li>
+              <li>After making changes, return here and click "Refresh Bucket Check"</li>
             </ol>
             <p className="mt-3 text-sm text-muted-foreground">
-              Note: If you've already created the bucket, check if its RLS policies allow public access.
+              Note: Make sure the Supabase user has proper permissions to access the storage bucket.
             </p>
           </DialogDescription>
         </DialogContent>

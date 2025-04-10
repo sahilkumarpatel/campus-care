@@ -11,12 +11,15 @@ export const useReportSubmission = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   
+  // Form state
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('');
   const [location, setLocation] = useState('');
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  
+  // Status state
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [rlsError, setRlsError] = useState(false);
   const [tableError, setTableError] = useState(false);
@@ -172,7 +175,7 @@ export const useReportSubmission = () => {
       
       if (image) {
         const fileName = `${Date.now()}_${image.name}`;
-        const filePath = `reports/${currentUser?.uid || 'anonymous'}/${fileName}`;
+        const filePath = `reports/${Date.now()}_${fileName}`;
         
         try {
           const { data: fileData, error: uploadError } = await supabase
@@ -221,6 +224,9 @@ export const useReportSubmission = () => {
         // Continue without authentication - relying on RLS policies for public access
       }
       
+      // Generate a unique ID for anonymous users or use Firebase UID if available
+      const userId = currentUser?.uid || `anon_${Math.random().toString(36).substring(2, 15)}`;
+      
       const newReport = {
         title,
         description,
@@ -230,7 +236,7 @@ export const useReportSubmission = () => {
         status: 'submitted',
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
-        reported_by: currentUser?.uid || 'anonymous',
+        reported_by: userId,
         reporter_name: currentUser?.displayName || 'Anonymous User',
         reporter_email: currentUser?.email || 'no-email@example.com',
       };
