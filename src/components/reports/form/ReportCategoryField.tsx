@@ -3,8 +3,13 @@ import React from 'react';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
+interface CategoryOption {
+  value: string;
+  label: string;
+}
+
 interface ReportCategoryFieldProps {
-  categories: string[];
+  categories: CategoryOption[];
   category: string;
   setCategory: (category: string) => void;
   disabled: boolean;
@@ -33,7 +38,7 @@ export const ReportCategoryField: React.FC<ReportCategoryFieldProps> = ({
         </SelectTrigger>
         <SelectContent>
           {categories.map((cat) => (
-            <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+            <SelectItem key={cat.value} value={cat.value}>{cat.label}</SelectItem>
           ))}
         </SelectContent>
       </Select>
