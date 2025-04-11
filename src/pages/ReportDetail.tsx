@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -11,7 +12,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import supabase from '@/lib/supabase';
+import supabase, { toUUID } from '@/lib/supabase';
 import CommentsList from '@/components/reports/comments/CommentsList';
 
 const ReportDetail = () => {
@@ -82,8 +83,54 @@ const ReportDetail = () => {
     };
     
     fetchReport();
-    fetchComments();
-  }, [reportId]);
+    if (reportId) {
+      fetchComments();
+      
+      // Set up real-time subscription for comments
+      const commentsChannel = supabase
+        .channel('report_comments_changes')
+        .on('postgres_changes', { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'report_comments',
+          filter: `report_id=eq.${reportId}`
+        }, () => {
+          console.log('New comment received, refreshing comments');
+          fetchComments();
+        })
+        .subscribe();
+        
+      // Set up real-time subscription for report status changes
+      const reportChannel = supabase
+        .channel('report_status_changes')
+        .on('postgres_changes', { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'reports',
+          filter: `id=eq.${reportId}`
+        }, (payload) => {
+          console.log('Report updated:', payload);
+          if (payload.new && payload.new.status !== payload.old.status) {
+            // Update the report status in the UI
+            setReport(prev => ({
+              ...prev,
+              status: payload.new.status
+            }));
+            
+            toast({
+              title: "Status Updated",
+              description: `This report has been marked as ${payload.new.status}`,
+            });
+          }
+        })
+        .subscribe();
+        
+      return () => {
+        supabase.removeChannel(commentsChannel);
+        supabase.removeChannel(reportChannel);
+      };
+    }
+  }, [reportId, toast]);
 
   const fetchComments = async () => {
     if (!reportId) return;
@@ -525,6 +572,20 @@ const ReportDetail = () => {
       </Dialog>
     </div>
   );
+};
+
+// Helper function for status styling
+const getStatusClass = (status: string) => {
+  switch (status) {
+    case 'submitted':
+      return 'status-badge status-submitted';
+    case 'in-progress':
+      return 'status-badge status-in-progress';
+    case 'resolved':
+      return 'status-badge status-resolved';
+    default:
+      return 'status-badge status-submitted';
+  }
 };
 
 export default ReportDetail;

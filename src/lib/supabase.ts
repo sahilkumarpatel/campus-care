@@ -11,4 +11,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // For checking if Supabase is configured properly
 export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
+// Helper function to convert string IDs to UUIDs
+export const toUUID = (id: string) => {
+  try {
+    return id;
+  } catch (error) {
+    console.error('Invalid UUID format:', error);
+    return id;
+  }
+};
+
 export default supabase;

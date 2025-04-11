@@ -53,6 +53,36 @@ export type Database = {
           },
         ]
       }
+      report_comments: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          is_admin: boolean | null
+          report_id: string
+          user_id: string
+          user_name: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          is_admin?: boolean | null
+          report_id: string
+          user_id: string
+          user_name: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          is_admin?: boolean | null
+          report_id?: string
+          user_id?: string
+          user_name?: string
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           category: string
