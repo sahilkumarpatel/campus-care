@@ -17,6 +17,7 @@ export interface ReportType {
   createdAt: any;
   reportedBy: string;
   reporterName?: string;
+  reporterEmail?: string;
 }
 
 interface ReportCardProps {
@@ -56,6 +57,28 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isAdminView = false }) 
     return "🏢";
   };
 
+  const formatTime = (date: any) => {
+    if (!date) return 'Just now';
+    
+    try {
+      // Handle Firebase Timestamp
+      if (date.toDate && typeof date.toDate === 'function') {
+        return formatDistanceToNow(date.toDate(), { addSuffix: true });
+      }
+      
+      // Handle JavaScript Date
+      if (date instanceof Date) {
+        return formatDistanceToNow(date, { addSuffix: true });
+      }
+      
+      // Handle string date
+      return formatDistanceToNow(new Date(date), { addSuffix: true });
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Recently';
+    }
+  };
+
   return (
     <Card className="h-full flex flex-col overflow-hidden hover:shadow-md transition-shadow">
       <CardHeader className="py-3 px-4 flex flex-row justify-between items-center">
@@ -87,9 +110,7 @@ const ReportCard: React.FC<ReportCardProps> = ({ report, isAdminView = false }) 
       </CardContent>
       <CardFooter className="px-4 py-3 border-t flex justify-between items-center bg-muted/20">
         <span className="text-xs text-muted-foreground">
-          {report.createdAt?.toDate 
-            ? formatDistanceToNow(report.createdAt.toDate(), { addSuffix: true }) 
-            : 'Just now'}
+          {formatTime(report.createdAt)}
         </span>
         <Button asChild variant="ghost" size="sm" className="text-xs p-0 h-auto hover:bg-transparent">
           <Link to={`/${isAdminView ? 'admin/reports' : 'my-reports'}/${report.id}`} className="flex items-center">

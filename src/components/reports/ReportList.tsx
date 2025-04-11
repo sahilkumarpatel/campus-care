@@ -7,17 +7,20 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Search, FilterX } from 'lucide-react';
 import supabase, { isSupabaseConfigured } from '@/lib/supabase';
+import { formatDistanceToNow } from 'date-fns';
 
 interface ReportListProps {
   isAdminView?: boolean;
   initialSearchTerm?: string;
   initialStatusFilter?: string;
+  initialSortOrder?: string;
 }
 
 const ReportList: React.FC<ReportListProps> = ({ 
   isAdminView = false, 
   initialSearchTerm = '',
-  initialStatusFilter = 'all'
+  initialStatusFilter = 'all',
+  initialSortOrder = 'newest'
 }) => {
   const { currentUser } = useAuth();
   const [reports, setReports] = useState<ReportType[]>([]);
@@ -25,12 +28,14 @@ const ReportList: React.FC<ReportListProps> = ({
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
+  const [sortOrder, setSortOrder] = useState(initialSortOrder);
 
   // Update local state when props change
   useEffect(() => {
     setSearchTerm(initialSearchTerm);
     setStatusFilter(initialStatusFilter);
-  }, [initialSearchTerm, initialStatusFilter]);
+    setSortOrder(initialSortOrder);
+  }, [initialSearchTerm, initialStatusFilter, initialSortOrder]);
 
   // Subscribe to real-time changes
   useEffect(() => {
@@ -75,8 +80,8 @@ const ReportList: React.FC<ReportListProps> = ({
         query = query.eq('reported_by', currentUser.uid);
       }
       
-      // Order by created_at descending
-      query = query.order('created_at', { ascending: false });
+      // Order by created_at
+      query = query.order('created_at', { ascending: sortOrder === 'oldest' });
       
       const { data, error: supabaseError } = await query;
       
@@ -112,7 +117,7 @@ const ReportList: React.FC<ReportListProps> = ({
 
   useEffect(() => {
     fetchReports();
-  }, [currentUser, isAdminView]);
+  }, [currentUser, isAdminView, sortOrder]);
 
   // Apply filters to reports
   const filteredReports = reports.filter(report => {
@@ -131,6 +136,7 @@ const ReportList: React.FC<ReportListProps> = ({
   const resetFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
+    setSortOrder('newest');
   };
 
   if (loading) {
@@ -153,7 +159,7 @@ const ReportList: React.FC<ReportListProps> = ({
   }
 
   // Skip the filter UI if the parent component provides filters
-  const shouldShowFilters = !initialSearchTerm && initialStatusFilter === 'all';
+  const shouldShowFilters = !initialSearchTerm && initialStatusFilter === 'all' && initialSortOrder === 'newest';
 
   return (
     <div className="pb-8">
@@ -188,7 +194,21 @@ const ReportList: React.FC<ReportListProps> = ({
                 <option value="resolved">Resolved</option>
               </select>
             </div>
-            {(searchTerm || statusFilter !== 'all') && (
+            <div className="flex items-center gap-2">
+              <Label htmlFor="sort-order" className="text-sm whitespace-nowrap">
+                Sort by:
+              </Label>
+              <select
+                id="sort-order"
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value)}
+                className="bg-white border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-campus-primary focus:border-campus-primary block p-2"
+              >
+                <option value="newest">Newest First</option>
+                <option value="oldest">Oldest First</option>
+              </select>
+            </div>
+            {(searchTerm || statusFilter !== 'all' || sortOrder !== 'newest') && (
               <Button
                 variant="ghost"
                 size="sm"

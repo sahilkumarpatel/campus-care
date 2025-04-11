@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
-import { Home, FileText, Settings, User, ChevronRight, Plus, ClipboardList, Users, Shield } from 'lucide-react';
+import { Home, FileText, Settings, User, ChevronRight, Plus, ClipboardList, Users, Shield, PieChart } from 'lucide-react';
 
 interface SidebarProps {
   isMobile?: boolean;
@@ -59,6 +59,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
       name: 'Admin Dashboard', 
       path: '/admin', 
       icon: <Shield className="mr-2 h-5 w-5" /> 
+    },
+    { 
+      name: 'Insights', 
+      path: '/admin/insights', 
+      icon: <PieChart className="mr-2 h-5 w-5" /> 
     },
     { 
       name: 'Manage Reports', 

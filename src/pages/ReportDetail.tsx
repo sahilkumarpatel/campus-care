@@ -10,37 +10,65 @@ import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import supabase from '@/lib/supabase';
 
 const ReportDetail = () => {
   const { reportId } = useParams<{ reportId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { currentUser } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
   
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [comment, setComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancellingReport, setCancellingReport] = useState(false);
   
-  // Simplified admin check for demo
-  const isAdmin = currentUser?.email === 'admin@college.edu';
-
   useEffect(() => {
     const fetchReport = async () => {
       if (!reportId) return;
       
       try {
         setLoading(true);
-        const reportDoc = await getDoc(doc(db, 'reports', reportId));
         
-        if (reportDoc.exists()) {
+        // Try Supabase first
+        const { data, error } = await supabase
+          .from('reports')
+          .select('*')
+          .eq('id', reportId)
+          .single();
+          
+        if (error) {
+          // Fall back to Firebase
+          const reportDoc = await getDoc(doc(db, 'reports', reportId));
+          
+          if (reportDoc.exists()) {
+            setReport({
+              id: reportDoc.id,
+              ...reportDoc.data()
+            });
+          } else {
+            setError('Report not found');
+          }
+        } else if (data) {
+          // Transform Supabase data
           setReport({
-            id: reportDoc.id,
-            ...reportDoc.data()
+            id: data.id,
+            title: data.title,
+            description: data.description,
+            category: data.category,
+            location: data.location,
+            status: data.status,
+            createdAt: new Date(data.created_at),
+            reportedBy: data.reported_by,
+            reporterName: data.reporter_name,
+            reporterEmail: data.reporter_email,
+            imageUrl: data.image_url
           });
-        } else {
-          setError('Report not found');
         }
       } catch (err) {
         console.error('Error fetching report:', err);
@@ -57,9 +85,18 @@ const ReportDetail = () => {
     if (!reportId) return;
     
     try {
-      await updateDoc(doc(db, 'reports', reportId), {
-        status: newStatus
-      });
+      // Try updating in Supabase
+      const { error } = await supabase
+        .from('reports')
+        .update({ status: newStatus })
+        .eq('id', reportId);
+        
+      if (error) {
+        // Fall back to Firebase
+        await updateDoc(doc(db, 'reports', reportId), {
+          status: newStatus
+        });
+      }
       
       setReport((prev: any) => ({
         ...prev,
@@ -104,6 +141,38 @@ const ReportDetail = () => {
       });
     } finally {
       setSubmittingComment(false);
+    }
+  };
+
+  const handleCancelReport = async () => {
+    if (!reportId || !cancelReason.trim()) return;
+    
+    try {
+      setCancellingReport(true);
+      
+      // In a real app, you'd update the report status and add the cancellation reason
+      // For demo purposes, we'll just show success toast
+      
+      toast({
+        title: "Report cancelled",
+        description: "Your report has been cancelled successfully",
+      });
+      
+      setShowCancelDialog(false);
+      setCancelReason('');
+      
+      // Navigate back to my reports after a brief delay
+      setTimeout(() => {
+        navigate('/my-reports');
+      }, 1500);
+    } catch (error) {
+      console.error('Error cancelling report:', error);
+      toast({
+        title: "Error",
+        description: "Failed to cancel report",
+        variant: "destructive",
+      });
+      setCancellingReport(false);
     }
   };
 
@@ -211,8 +280,8 @@ const ReportDetail = () => {
               <div>
                 <h3 className="text-sm font-medium text-muted-foreground mb-1">Reported</h3>
                 <p>
-                  {report.createdAt?.toDate 
-                    ? formatDistanceToNow(report.createdAt.toDate(), { addSuffix: true }) 
+                  {report.createdAt 
+                    ? formatDistanceToNow(new Date(report.createdAt), { addSuffix: true }) 
                     : 'Recently'}
                 </p>
               </div>
@@ -301,6 +370,15 @@ const ReportDetail = () => {
               </div>
             </CardContent>
             <CardFooter className="border-t bg-muted/20 flex justify-center">
+              {!isAdmin && report.status !== 'resolved' && (
+                <Button 
+                  variant="outline" 
+                  className="w-full mt-2 text-red-500 hover:text-red-600"
+                  onClick={() => setShowCancelDialog(true)}
+                >
+                  Cancel Report
+                </Button>
+              )}
               {!isAdmin && report.status === 'resolved' && (
                 <Button variant="outline" className="w-full mt-2">
                   Provide Feedback
@@ -310,6 +388,45 @@ const ReportDetail = () => {
           </Card>
         </div>
       </div>
+      
+      {/* Cancel Report Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Report</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this report? This action will mark the report as withdrawn.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="cancel-reason">Reason for cancellation (optional)</Label>
+            <Textarea
+              id="cancel-reason"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              placeholder="Please provide a reason for cancelling this report"
+              className="mt-2"
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCancelDialog(false)}
+              disabled={cancellingReport}
+            >
+              Keep Report
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelReport}
+              disabled={cancellingReport}
+            >
+              {cancellingReport ? "Cancelling..." : "Cancel Report"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

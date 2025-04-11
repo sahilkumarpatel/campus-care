@@ -4,17 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, ClipboardList, Users, CheckCircle2, Bell } from 'lucide-react';
+import { AlertCircle, ClipboardList, Users, CheckCircle2, Bell, PieChart } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
 import { ReportType } from '@/components/reports/ReportCard';
 import { Badge } from '@/components/ui/badge';
 import supabase, { isSupabaseConfigured } from '@/lib/supabase';
-
-// Remove duplicate Supabase initialization
-// const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
-// const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
-// const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { formatDistanceToNow } from 'date-fns';
 
 interface Notification {
   id: string;
@@ -40,6 +37,8 @@ const AdminDashboard = () => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
+  const [showReportDetails, setShowReportDetails] = useState(false);
 
   // Check if user is admin
   const isAdmin = currentUser?.email === 'admin@pccoepune.org';
@@ -219,6 +218,40 @@ const AdminDashboard = () => {
       });
   };
 
+  const handleViewReport = (report: ReportType) => {
+    setSelectedReport(report);
+    setShowReportDetails(true);
+  };
+
+  const handleUpdateStatus = async (reportId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('reports')
+        .update({ status: newStatus })
+        .eq('id', reportId);
+        
+      if (error) throw error;
+      
+      toast({
+        title: "Status Updated",
+        description: `Report has been marked as ${newStatus}`,
+      });
+      
+      fetchAdminData();
+      
+      if (selectedReport && selectedReport.id === reportId) {
+        setSelectedReport(prev => prev ? {...prev, status: newStatus} : null);
+      }
+    } catch (error) {
+      console.error('Error updating report status:', error);
+      toast({
+        title: "Error",
+        description: "Failed to update report status",
+        variant: "destructive"
+      });
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -374,13 +407,33 @@ const AdminDashboard = () => {
                       </span>
                     </div>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    onClick={() => navigate(`/admin/reports/${report.id}`)}
-                  >
-                    View
-                  </Button>
+                  <div className="flex gap-2">
+                    {report.status !== 'in-progress' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleUpdateStatus(report.id, 'in-progress')}
+                      >
+                        Mark Pending
+                      </Button>
+                    )}
+                    {report.status !== 'resolved' && (
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleUpdateStatus(report.id, 'resolved')}
+                      >
+                        Mark Resolved
+                      </Button>
+                    )}
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => handleViewReport(report)}
+                    >
+                      View
+                    </Button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -388,32 +441,93 @@ const AdminDashboard = () => {
         </CardContent>
       </Card>
       
-      {/* Quick actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Button 
-          onClick={() => navigate('/admin/reports')}
-          className="h-auto py-4 bg-campus-primary hover:bg-campus-primary/90"
-        >
-          <ClipboardList className="mr-2 h-5 w-5" />
-          Manage Reports
-        </Button>
-        
-        <Button 
-          onClick={() => navigate('/admin/users')}
-          className="h-auto py-4 bg-campus-primary hover:bg-campus-primary/90"
-        >
-          <Users className="mr-2 h-5 w-5" />
-          Manage Users
-        </Button>
-        
-        <Button 
-          onClick={() => navigate('/admin/teams')}
-          className="h-auto py-4 bg-campus-primary hover:bg-campus-primary/90"
-        >
-          <Users className="mr-2 h-5 w-5" />
-          Manage Teams
-        </Button>
-      </div>
+      {/* Report Details Dialog */}
+      <Dialog open={showReportDetails} onOpenChange={setShowReportDetails}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedReport?.title}</DialogTitle>
+            <DialogDescription>
+              Report ID: {selectedReport?.id}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedReport && (
+            <div className="space-y-4 mt-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Status</h3>
+                  <p className={`status-badge status-${selectedReport.status} mt-1`}>
+                    {selectedReport.status.charAt(0).toUpperCase() + selectedReport.status.slice(1)}
+                  </p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Category</h3>
+                  <p className="mt-1">{selectedReport.category}</p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Location</h3>
+                  <p className="mt-1">{selectedReport.location}</p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Reported On</h3>
+                  <p className="mt-1">
+                    {selectedReport.createdAt ? formatDistanceToNow(new Date(selectedReport.createdAt), { addSuffix: true }) : 'Unknown'}
+                  </p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Reporter</h3>
+                  <p className="mt-1">{selectedReport.reporterName || 'Anonymous'}</p>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Reporter Email</h3>
+                  <p className="mt-1">{selectedReport.reporterEmail || 'Not provided'}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground">Description</h3>
+                <p className="mt-1 whitespace-pre-wrap">{selectedReport.description}</p>
+              </div>
+              
+              {selectedReport.imageUrl && (
+                <div>
+                  <h3 className="text-sm font-medium text-muted-foreground">Attached Image</h3>
+                  <div className="mt-2 max-h-80 overflow-hidden rounded-md">
+                    <img 
+                      src={selectedReport.imageUrl} 
+                      alt="Report evidence" 
+                      className="w-full object-contain"
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <div className="pt-4 flex justify-end space-x-2 border-t">
+                {selectedReport.status !== 'in-progress' && (
+                  <Button 
+                    variant="outline"
+                    onClick={() => handleUpdateStatus(selectedReport.id, 'in-progress')}
+                  >
+                    Mark as Pending
+                  </Button>
+                )}
+                {selectedReport.status !== 'resolved' && (
+                  <Button 
+                    onClick={() => handleUpdateStatus(selectedReport.id, 'resolved')}
+                  >
+                    Mark as Resolved
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
