@@ -82,6 +82,36 @@ const ReportDetail = () => {
     fetchReport();
   }, [reportId]);
 
+  const sendNotification = async (status: string) => {
+    if (!report || !report.reportedBy) return;
+    
+    try {
+      const notificationType = status === 'in-progress' ? 'status_update' : 'resolved';
+      const notificationTitle = status === 'in-progress' 
+        ? 'Your report is now in progress' 
+        : 'Your report has been resolved';
+      const notificationContent = status === 'in-progress'
+        ? `Your report "${report.title}" is now being processed.`
+        : `Your report "${report.title}" has been marked as resolved.`;
+      
+      // Create notification in Supabase
+      await supabase
+        .from('notifications')
+        .insert({
+          recipient: report.reportedBy,
+          type: notificationType,
+          title: notificationTitle,
+          content: notificationContent,
+          report_id: reportId,
+          read: false
+        });
+      
+      console.log('Notification sent successfully');
+    } catch (error) {
+      console.error('Error sending notification:', error);
+    }
+  };
+
   const handleUpdateStatus = async (newStatus: string) => {
     if (!reportId) return;
     
@@ -103,6 +133,11 @@ const ReportDetail = () => {
         ...prev,
         status: newStatus
       }));
+      
+      // Send notification to user when admin changes status to in-progress or resolved
+      if (isAdmin && (newStatus === 'in-progress' || newStatus === 'resolved')) {
+        await sendNotification(newStatus);
+      }
       
       toast({
         title: "Status updated",
