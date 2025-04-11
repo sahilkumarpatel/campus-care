@@ -1,254 +1,211 @@
-
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/context/AuthContext';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, ClipboardList, Users, CheckCircle2, Bell, PieChart } from 'lucide-react';
-import { useToast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
-import { ReportType } from '@/components/reports/ReportCard';
-import { Badge } from '@/components/ui/badge';
-import supabase, { isSupabaseConfigured } from '@/lib/supabase';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { MoreVertical, Edit, Copy, Trash, ArrowLeft, MessageCircle } from 'lucide-react';
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/components/ui/use-toast';
 import { formatDistanceToNow } from 'date-fns';
+import { db } from '@/lib/firebase';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { useAuth } from '@/context/AuthContext';
+import supabase from '@/lib/supabase';
 
-interface Notification {
+interface Report {
   id: string;
   title: string;
-  content: string;
-  type: string;
-  read: boolean;
-  created_at: string;
-  report_id?: string;
+  description: string;
+  category: string;
+  location: string;
+  status: string;
+  createdAt: string;
+  imageUrl?: string | null;
+  reportedBy: string;
+  reporterName?: string;
+  reporterEmail?: string;
 }
 
 const AdminDashboard = () => {
-  const { currentUser } = useAuth();
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortOrder, setSortOrder] = useState('newest');
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [comment, setComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [stats, setStats] = useState({
-    totalReports: 0,
-    pendingReports: 0,
-    resolvedReports: 0,
-    totalUsers: 0
-  });
-  const [recentReports, setRecentReports] = useState<ReportType[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showNotifications, setShowNotifications] = useState(false);
-  const [selectedReport, setSelectedReport] = useState<ReportType | null>(null);
-  const [showReportDetails, setShowReportDetails] = useState(false);
-
-  // Check if user is admin
-  const isAdmin = currentUser?.email === 'admin@pccoepune.org';
-
-  // Subscribe to real-time changes for reports and notifications
-  useEffect(() => {
-    if (!isAdmin) return;
-    
-    const reportsChannel = supabase
-      .channel('reports_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'reports' 
-      }, () => {
-        fetchAdminData();
-      })
-      .subscribe();
-      
-    const notificationsChannel = supabase
-      .channel('notifications_changes')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'notifications' 
-      }, () => {
-        fetchNotifications();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(reportsChannel);
-      supabase.removeChannel(notificationsChannel);
-    };
-  }, [isAdmin]);
+  const { isAdmin } = useAuth();
 
   useEffect(() => {
     if (!isAdmin) {
-      toast({
-        title: "Access Denied",
-        description: "You do not have permission to view this page",
-        variant: "destructive"
-      });
-      navigate('/dashboard');
+      navigate('/login');
       return;
     }
-
-    fetchAdminData();
-    fetchNotifications();
-  }, [currentUser, navigate, toast, isAdmin]);
-
-  const fetchNotifications = async () => {
-    if (!isAdmin) return;
     
-    try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('recipient', 'admin')
-        .order('created_at', { ascending: false })
-        .limit(10);
+    const fetchReports = async () => {
+      try {
+        setLoading(true);
         
-      if (error) throw error;
-      
-      if (data) {
-        setNotifications(data as Notification[]);
-        
-        // Show toast for new unread notifications
-        const unreadCount = data.filter(n => !n.read).length;
-        if (unreadCount > 0) {
-          toast({
-            title: `${unreadCount} New Notification${unreadCount > 1 ? 's' : ''}`,
-            description: "You have new notifications to review",
-          });
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching notifications:', error);
-    }
-  };
-
-  const markAllNotificationsAsRead = async () => {
-    try {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('recipient', 'admin')
-        .eq('read', false);
-        
-      if (error) throw error;
-      
-      fetchNotifications();
-    } catch (error) {
-      console.error('Error marking notifications as read:', error);
-    }
-  };
-
-  const fetchAdminData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch reports from Supabase
-      const { data: reportsData, error: reportsError } = await supabase
-        .from('reports')
-        .select('*');
-        
-      if (reportsError) throw reportsError;
-      
-      if (reportsData) {
-        // Calculate stats
-        const totalReports = reportsData.length;
-        const pendingReports = reportsData.filter(r => r.status !== 'resolved').length;
-        const resolvedReports = reportsData.filter(r => r.status === 'resolved').length;
-        
-        // Get unique users
-        const usersSet = new Set();
-        reportsData.forEach(report => {
-          if (report.reported_by) {
-            usersSet.add(report.reported_by);
-          }
-        });
-        
-        setStats({
-          totalReports,
-          pendingReports,
-          resolvedReports,
-          totalUsers: usersSet.size
-        });
-        
-        // Get recent reports
-        const recentData = reportsData
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          .slice(0, 5);
+        const { data: supabaseData, error: supabaseError } = await supabase
+          .from('reports')
+          .select('*');
           
-        // Transform to ReportType
-        const transformedReports: ReportType[] = recentData.map(report => ({
-          id: report.id,
-          title: report.title,
-          description: report.description,
-          category: report.category,
-          location: report.location,
-          status: report.status,
-          createdAt: new Date(report.created_at),
-          reportedBy: report.reported_by,
-          reporterName: report.reporter_name,
-          reporterEmail: report.reporter_email,
-          imageUrl: report.image_url
-        }));
-        
-        setRecentReports(transformedReports);
-      }
-    } catch (error) {
-      console.error('Error fetching admin data:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load admin dashboard data",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleNotificationClick = (notification: Notification) => {
-    // Mark notification as read
-    supabase
-      .from('notifications')
-      .update({ read: true })
-      .eq('id', notification.id)
-      .then(() => {
-        // Navigate to report if report_id exists
-        if (notification.report_id) {
-          navigate(`/admin/reports/${notification.report_id}`);
+        if (supabaseError) {
+          console.error('Supabase error:', supabaseError);
+          setError('Failed to load reports from Supabase.');
         }
-        // Refresh notifications
-        fetchNotifications();
-      });
-  };
+        
+        if (supabaseData) {
+          const transformedReports = supabaseData.map(report => ({
+            id: report.id,
+            title: report.title,
+            description: report.description,
+            category: report.category,
+            location: report.location,
+            status: report.status,
+            createdAt: report.created_at,
+            imageUrl: report.image_url,
+            reportedBy: report.reported_by,
+            reporterName: report.reporter_name,
+            reporterEmail: report.reporter_email,
+          }));
+          setReports(transformedReports);
+        }
+      } catch (err) {
+        console.error('Error fetching reports:', err);
+        setError('Failed to load reports.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchReports();
+  }, [isAdmin, navigate]);
 
-  const handleViewReport = (report: ReportType) => {
+  const filteredReports = reports.filter(report =>
+    report.title.toLowerCase().includes(searchTerm.toLowerCase()) &&
+    (statusFilter === 'all' || report.status === statusFilter)
+  );
+
+  const sortedReports = [...filteredReports].sort((a, b) => {
+    const dateA = new Date(a.createdAt).getTime();
+    const dateB = new Date(b.createdAt).getTime();
+    return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
+  });
+
+  const handleViewReport = (report: Report) => {
     setSelectedReport(report);
-    setShowReportDetails(true);
+    setIsViewModalOpen(true);
   };
 
-  const handleUpdateStatus = async (reportId: string, newStatus: string) => {
+  const handleCloseViewModal = () => {
+    setIsViewModalOpen(false);
+    setSelectedReport(null);
+  };
+
+  const handleUpdateStatus = async (reportId: string, newStatus: 'submitted' | 'in-progress' | 'resolved') => {
     try {
+      // Try updating in Supabase
       const { error } = await supabase
         .from('reports')
         .update({ status: newStatus })
         .eq('id', reportId);
-        
-      if (error) throw error;
       
-      toast({
-        title: "Status Updated",
-        description: `Report has been marked as ${newStatus}`,
+      if (error) {
+        // Fall back to Firebase
+        await updateDoc(doc(db, 'reports', reportId), {
+          status: newStatus
+        });
+      }
+      
+      // Update local state
+      setSelectedReport(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          status: newStatus
+        };
       });
       
-      fetchAdminData();
+      // Update reports list
+      setReports(prevReports => 
+        prevReports.map(report => 
+          report.id === reportId ? { ...report, status: newStatus } : report
+        )
+      );
       
-      if (selectedReport && selectedReport.id === reportId) {
-        setSelectedReport(prev => prev ? {...prev, status: newStatus} : null);
-      }
+      toast({
+        title: "Status updated",
+        description: `Report status updated to ${newStatus}`,
+      });
+      
+      // Close the modal after updating
+      setIsViewModalOpen(false);
     } catch (error) {
-      console.error('Error updating report status:', error);
+      console.error('Error updating status:', error);
       toast({
         title: "Error",
-        description: "Failed to update report status",
-        variant: "destructive"
+        description: "Failed to update status",
+        variant: "destructive",
       });
+    }
+  };
+
+  const handleCommentSubmit = async () => {
+    if (!selectedReport?.id || !comment.trim()) return;
+    
+    try {
+      setSubmittingComment(true);
+      
+      // In a real app, you would add this to a comments collection
+      // For demo purposes, we'll just show success toast
+      
+      toast({
+        title: "Comment submitted",
+        description: "Your comment has been added to this report",
+      });
+      
+      setComment('');
+    } catch (error) {
+      console.error('Error submitting comment:', error);
+      toast({
+        title: "Error",
+        description: "Failed to submit comment",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const getStatusClass = (status: string) => {
+    switch (status) {
+      case 'submitted':
+        return 'status-badge status-submitted';
+      case 'in-progress':
+        return 'status-badge status-in-progress';
+      case 'resolved':
+        return 'status-badge status-resolved';
+      default:
+        return 'status-badge status-submitted';
     }
   };
 
@@ -260,272 +217,208 @@ const AdminDashboard = () => {
     );
   }
 
-  if (!isAdmin) {
-    return null; // Will redirect from useEffect
+  if (error) {
+    return (
+      <div className="container mx-auto max-w-4xl pt-20 px-4">
+        <Card className="text-center py-12">
+          <CardContent>
+            <p className="text-campus-error mb-4">{error}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
-  const unreadCount = notifications.filter(n => !n.read).length;
-
   return (
-    <div className="space-y-6 p-4 md:p-8">
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto pt-20">
+      <header className="mb-6">
         <h1 className="text-3xl font-bold">Admin Dashboard</h1>
-        
+        <p className="text-muted-foreground">Manage and oversee all submitted reports</p>
+      </header>
+      
+      <div className="flex flex-col md:flex-row gap-4 items-start md:items-center mb-6">
+        <div className="w-full md:w-64 relative">
+          <Input
+            type="search"
+            placeholder="Search reports..."
+            className="pl-10"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <Button
-              variant="outline"
-              className="relative"
-              onClick={() => setShowNotifications(!showNotifications)}
-            >
-              <Bell className="h-5 w-5" />
-              {unreadCount > 0 && (
-                <Badge className="absolute -top-2 -right-2 bg-red-500 text-white" variant="secondary">
-                  {unreadCount}
-                </Badge>
-              )}
-            </Button>
-            
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-80 bg-white border rounded-lg shadow-lg z-50 max-h-96 overflow-y-auto">
-                <div className="p-3 border-b flex justify-between items-center">
-                  <h3 className="font-semibold">Notifications</h3>
-                  {unreadCount > 0 && (
-                    <Button variant="ghost" size="sm" onClick={markAllNotificationsAsRead}>
-                      Mark all as read
-                    </Button>
-                  )}
-                </div>
-                {notifications.length === 0 ? (
-                  <div className="p-4 text-center text-gray-500">No notifications</div>
-                ) : (
-                  <div>
-                    {notifications.map(notification => (
-                      <div 
-                        key={notification.id}
-                        className={`p-3 border-b cursor-pointer hover:bg-gray-50 flex items-start gap-3 ${!notification.read ? 'bg-blue-50' : ''}`}
-                        onClick={() => handleNotificationClick(notification)}
-                      >
-                        <Bell className={`h-5 w-5 mt-0.5 ${!notification.read ? 'text-blue-500' : 'text-gray-500'}`} />
-                        <div>
-                          <p className="font-medium text-sm">{notification.title}</p>
-                          <p className="text-xs text-gray-600">{notification.content}</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {new Date(notification.created_at).toLocaleString()}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <span className="text-sm whitespace-nowrap">Filter by:</span>
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Status</SelectItem>
+              <SelectItem value="submitted">Submitted</SelectItem>
+              <SelectItem value="in-progress">In Progress</SelectItem>
+              <SelectItem value="resolved">Resolved</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm whitespace-nowrap">Sort by:</span>
+          <Select value={sortOrder} onValueChange={setSortOrder}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Sort order" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">Newest First</SelectItem>
+              <SelectItem value="oldest">Oldest First</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
-      
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <div className="bg-blue-100 p-3 rounded-full">
-                <ClipboardList className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Reports</p>
-                <h3 className="text-2xl font-bold">{stats.totalReports}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <div className="bg-yellow-100 p-3 rounded-full">
-                <AlertCircle className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Pending Issues</p>
-                <h3 className="text-2xl font-bold">{stats.pendingReports}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <div className="bg-green-100 p-3 rounded-full">
-                <CheckCircle2 className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Resolved Issues</p>
-                <h3 className="text-2xl font-bold">{stats.resolvedReports}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center space-x-4">
-              <div className="bg-purple-100 p-3 rounded-full">
-                <Users className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Total Users</p>
-                <h3 className="text-2xl font-bold">{stats.totalUsers}</h3>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
+      <div className="rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Title</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sortedReports.map((report) => (
+              <TableRow key={report.id}>
+                <TableCell>{report.title}</TableCell>
+                <TableCell>{report.category}</TableCell>
+                <TableCell>{report.location}</TableCell>
+                <TableCell>
+                  <span className={getStatusClass(report.status)}>
+                    {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <span className="sr-only">Open menu</span>
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent align="end">
+                      <ContextMenuItem onClick={() => handleViewReport(report)}>
+                        <Edit className="mr-2 h-4 w-4" /> View
+                      </ContextMenuItem>
+                      <ContextMenuItem>
+                        <Copy className="mr-2 h-4 w-4" /> Copy Report ID
+                      </ContextMenuItem>
+                      <ContextMenuItem>
+                        <Trash className="mr-2 h-4 w-4" /> Delete
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                </TableCell>
+              </TableRow>
+            ))}
+            {sortedReports.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center">
+                  No reports found.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
-      
-      {/* Recent reports */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Reports</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {recentReports.length === 0 ? (
-            <p className="text-muted-foreground text-center py-4">No reports found</p>
-          ) : (
-            <div className="space-y-4">
-              {recentReports.map(report => (
-                <div key={report.id} className="flex items-center justify-between border-b pb-4">
-                  <div>
-                    <h4 className="font-medium">{report.title}</h4>
-                    <p className="text-sm text-muted-foreground line-clamp-1">{report.description}</p>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className={`status-badge status-${report.status}`}>
-                        {report.status.charAt(0).toUpperCase() + report.status.slice(1)}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {report.location}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    {report.status !== 'in-progress' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleUpdateStatus(report.id, 'in-progress')}
-                      >
-                        Mark Pending
-                      </Button>
-                    )}
-                    {report.status !== 'resolved' && (
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        onClick={() => handleUpdateStatus(report.id, 'resolved')}
-                      >
-                        Mark Resolved
-                      </Button>
-                    )}
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => handleViewReport(report)}
-                    >
-                      View
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      
-      {/* Report Details Dialog */}
-      <Dialog open={showReportDetails} onOpenChange={setShowReportDetails}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+
+      {/* View Report Dialog */}
+      <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{selectedReport?.title}</DialogTitle>
+            <DialogTitle>Report Details</DialogTitle>
             <DialogDescription>
-              Report ID: {selectedReport?.id}
+              View and manage the details of the selected report.
             </DialogDescription>
           </DialogHeader>
-          
           {selectedReport && (
-            <div className="space-y-4 mt-4">
+            <div className="grid gap-4 py-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Status</h3>
-                  <p className={`status-badge status-${selectedReport.status} mt-1`}>
-                    {selectedReport.status.charAt(0).toUpperCase() + selectedReport.status.slice(1)}
-                  </p>
+                  <Label>Title</Label>
+                  <Input type="text" value={selectedReport.title} readOnly />
                 </div>
-                
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Category</h3>
-                  <p className="mt-1">{selectedReport.category}</p>
-                </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Location</h3>
-                  <p className="mt-1">{selectedReport.location}</p>
-                </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Reported On</h3>
-                  <p className="mt-1">
-                    {selectedReport.createdAt ? formatDistanceToNow(new Date(selectedReport.createdAt), { addSuffix: true }) : 'Unknown'}
-                  </p>
-                </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Reporter</h3>
-                  <p className="mt-1">{selectedReport.reporterName || 'Anonymous'}</p>
-                </div>
-                
-                <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Reporter Email</h3>
-                  <p className="mt-1">{selectedReport.reporterEmail || 'Not provided'}</p>
+                  <Label>Category</Label>
+                  <Input type="text" value={selectedReport.category} readOnly />
                 </div>
               </div>
-              
               <div>
-                <h3 className="text-sm font-medium text-muted-foreground">Description</h3>
-                <p className="mt-1 whitespace-pre-wrap">{selectedReport.description}</p>
+                <Label>Description</Label>
+                <Textarea value={selectedReport.description} readOnly className="min-h-[100px]" />
               </div>
-              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label>Location</Label>
+                  <Input type="text" value={selectedReport.location} readOnly />
+                </div>
+                <div>
+                  <Label>Reported By</Label>
+                  <Input type="text" value={selectedReport.reporterName || 'Anonymous'} readOnly />
+                </div>
+              </div>
+              <div>
+                <Label>Reported At</Label>
+                <Input
+                  type="text"
+                  value={selectedReport.createdAt ? formatDistanceToNow(new Date(selectedReport.createdAt), { addSuffix: true }) : 'Recently'}
+                  readOnly
+                />
+              </div>
               {selectedReport.imageUrl && (
                 <div>
-                  <h3 className="text-sm font-medium text-muted-foreground">Attached Image</h3>
-                  <div className="mt-2 max-h-80 overflow-hidden rounded-md">
-                    <img 
-                      src={selectedReport.imageUrl} 
-                      alt="Report evidence" 
-                      className="w-full object-contain"
-                    />
-                  </div>
+                  <Label>Image</Label>
+                  <img src={selectedReport.imageUrl} alt="Report" className="w-full rounded-md" />
                 </div>
               )}
+              <div>
+                <Label>Status</Label>
+                <Select
+                  value={selectedReport.status}
+                  onValueChange={(value) => selectedReport && handleUpdateStatus(selectedReport.id, value as 'submitted' | 'in-progress' | 'resolved')}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="submitted">Submitted</SelectItem>
+                    <SelectItem value="in-progress">In Progress</SelectItem>
+                    <SelectItem value="resolved">Resolved</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               
-              <div className="pt-4 flex justify-end space-x-2 border-t">
-                {selectedReport.status !== 'in-progress' && (
-                  <Button 
-                    variant="outline"
-                    onClick={() => handleUpdateStatus(selectedReport.id, 'in-progress')}
-                  >
-                    Mark as Pending
-                  </Button>
-                )}
-                {selectedReport.status !== 'resolved' && (
-                  <Button 
-                    onClick={() => handleUpdateStatus(selectedReport.id, 'resolved')}
-                  >
-                    Mark as Resolved
-                  </Button>
-                )}
+              <div className="mt-4">
+                <Label htmlFor="comment">Add a comment</Label>
+                <Textarea
+                  placeholder="Add a comment..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={3}
+                />
+                <Button 
+                  className="mt-2 bg-campus-primary hover:bg-campus-primary/90"
+                  disabled={!comment.trim() || submittingComment}
+                  onClick={handleCommentSubmit}
+                >
+                  {submittingComment ? "Submitting..." : "Submit Comment"}
+                </Button>
               </div>
             </div>
           )}
+          <DialogFooter>
+            <Button variant="secondary" onClick={handleCloseViewModal}>
+              Close
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
