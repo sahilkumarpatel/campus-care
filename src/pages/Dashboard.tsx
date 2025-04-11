@@ -29,6 +29,7 @@ const Dashboard = () => {
   useEffect(() => {
     if (!currentUser?.uid) return;
     
+    // Listen for changes to reports
     const reportsChannel = supabase
       .channel('reports_changes')
       .on('postgres_changes', { 
@@ -37,6 +38,7 @@ const Dashboard = () => {
         table: 'reports',
         filter: `reported_by=eq.${currentUser.uid}`
       }, () => {
+        console.log("Reports updated, fetching data...");
         fetchDashboardData();
         toast({
           title: "Report Updated",
@@ -45,6 +47,7 @@ const Dashboard = () => {
       })
       .subscribe();
       
+    // Listen for new notifications  
     const notificationsChannel = supabase
       .channel('user_notifications')
       .on('postgres_changes', { 

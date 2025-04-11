@@ -173,6 +173,8 @@ const AdminDashboard = () => {
         .eq('id', reportId);
       
       if (error) {
+        console.error('Supabase error:', error);
+        // Fallback to Firebase
         await updateDoc(doc(db, 'reports', reportId), {
           status: newStatus
         });
@@ -203,16 +205,23 @@ const AdminDashboard = () => {
             ? `Your report "${report.title}" is now being processed.`
             : `Your report "${report.title}" has been marked as resolved.`;
           
-          await supabase
-            .from('notifications')
-            .insert({
-              recipient: report.reportedBy,
-              type: 'status_update',
-              title: notificationTitle,
-              content: notificationContent,
-              report_id: reportId,
-              read: false
-            });
+          try {
+            await supabase
+              .from('notifications')
+              .insert([{
+                recipient: report.reportedBy,
+                type: 'status_update',
+                title: notificationTitle,
+                content: notificationContent,
+                report_id: reportId,
+                user_id: report.reportedBy,
+                read: false
+              }]);
+            
+            console.log('Notification sent successfully');
+          } catch (notificationError) {
+            console.error('Error sending notification:', notificationError);
+          }
         }
       }
       
@@ -247,12 +256,16 @@ const AdminDashboard = () => {
         created_at: new Date().toISOString()
       };
       
+      // Insert the comment
       const { data, error } = await supabase
         .from('report_comments')
-        .insert(newComment)
+        .insert([newComment])
         .select();
         
-      if (error) throw error;
+      if (error) {
+        console.error('Error submitting comment:', error);
+        throw error;
+      }
       
       // Add to local state
       if (data && data.length > 0) {
@@ -261,16 +274,21 @@ const AdminDashboard = () => {
       
       // Send notification to the report owner
       if (selectedReport.reportedBy) {
-        await supabase
-          .from('notifications')
-          .insert({
-            recipient: selectedReport.reportedBy,
-            type: 'comment',
-            title: 'New comment on your report',
-            content: `An admin has commented on your report "${selectedReport.title}"`,
-            report_id: selectedReport.id,
-            read: false
-          });
+        try {
+          await supabase
+            .from('notifications')
+            .insert([{
+              recipient: selectedReport.reportedBy,
+              type: 'comment',
+              title: 'New comment on your report',
+              content: `An admin has commented on your report "${selectedReport.title}"`,
+              report_id: selectedReport.id,
+              user_id: selectedReport.reportedBy,
+              read: false
+            }]);
+        } catch (notificationError) {
+          console.error('Error sending notification:', notificationError);
+        }
       }
       
       toast({

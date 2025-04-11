@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/AuthContext';
-import { Home, FileText, Settings, User, ChevronRight, Plus, ClipboardList, Users, Shield, PieChart } from 'lucide-react';
+import { Home, FileText, Settings, User, ChevronRight, Plus, ClipboardList, Shield, PieChart } from 'lucide-react';
 
 interface SidebarProps {
   isMobile?: boolean;
@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
     },
   ];
 
-  // Admin routes
+  // Admin routes - Remove the Manage Users link
   const adminRoutes = [
     { 
       name: 'Admin Dashboard', 
@@ -69,16 +69,6 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
       name: 'Manage Reports', 
       path: '/admin/reports', 
       icon: <FileText className="mr-2 h-5 w-5" /> 
-    },
-    { 
-      name: 'Manage Users', 
-      path: '/admin/users', 
-      icon: <User className="mr-2 h-5 w-5" /> 
-    },
-    { 
-      name: 'Manage Teams', 
-      path: '/admin/teams', 
-      icon: <Users className="mr-2 h-5 w-5" /> 
     },
   ];
 

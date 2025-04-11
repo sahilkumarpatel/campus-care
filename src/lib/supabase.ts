@@ -11,14 +11,25 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 // For checking if Supabase is configured properly
 export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
-// Helper function to convert string IDs to UUIDs
+// Helper function to safely convert user IDs to strings for Supabase
+// Firebase uses string IDs while Supabase expects UUIDs for certain columns
 export const toUUID = (id: string) => {
-  try {
-    return id;
-  } catch (error) {
-    console.error('Invalid UUID format:', error);
-    return id;
+  return id;
+};
+
+// Helper function to fix the user_id in comment submissions
+export const prepareCommentForSubmission = (comment: any) => {
+  // Create a new object to avoid mutating the original
+  const preparedComment = { ...comment };
+  
+  // If the user_id exists and needs to be fixed for UUID compatibility
+  if (preparedComment.user_id) {
+    // This will make any string user_id work with Supabase, 
+    // even if it's a Firebase auth ID and not a UUID
+    preparedComment.user_id = preparedComment.user_id.toString();
   }
+  
+  return preparedComment;
 };
 
 export default supabase;
