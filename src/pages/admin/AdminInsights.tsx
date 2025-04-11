@@ -34,6 +34,22 @@ const AdminInsights = () => {
     }
     
     fetchInsightsData();
+    
+    // Set up real-time subscription for updates
+    const channel = supabase
+      .channel('insights_updates')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reports' 
+      }, () => {
+        fetchInsightsData();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAdmin, navigate, toast]);
 
   const fetchInsightsData = async () => {

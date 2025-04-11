@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -24,6 +25,7 @@ import { db } from '@/lib/firebase';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useAuth } from '@/context/AuthContext';
 import supabase from '@/lib/supabase';
+import CommentsList from '@/components/reports/comments/CommentsList';
 
 interface Report {
   id: string;
@@ -50,9 +52,11 @@ const AdminDashboard = () => {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [comment, setComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { isAdmin } = useAuth();
+  const { currentUser, isAdmin } = useAuth();
 
   useEffect(() => {
     if (!isAdmin) {
@@ -98,6 +102,22 @@ const AdminDashboard = () => {
     };
     
     fetchReports();
+
+    // Set up real-time subscription for updates
+    const channel = supabase
+      .channel('reports_changes')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'reports' 
+      }, () => {
+        fetchReports();
+      })
+      .subscribe();
+      
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [isAdmin, navigate]);
 
   const filteredReports = reports.filter(report =>
@@ -111,14 +131,38 @@ const AdminDashboard = () => {
     return sortOrder === 'newest' ? dateB - dateA : dateA - dateB;
   });
 
-  const handleViewReport = (report: Report) => {
+  const fetchComments = async (reportId: string) => {
+    try {
+      setLoadingComments(true);
+      
+      const { data, error } = await supabase
+        .from('report_comments')
+        .select('*')
+        .eq('report_id', reportId)
+        .order('created_at', { ascending: true });
+        
+      if (error) throw error;
+      
+      if (data) {
+        setComments(data);
+      }
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
+  const handleViewReport = async (report: Report) => {
     setSelectedReport(report);
     setIsViewModalOpen(true);
+    await fetchComments(report.id);
   };
 
   const handleCloseViewModal = () => {
     setIsViewModalOpen(false);
     setSelectedReport(null);
+    setComments([]);
   };
 
   const handleUpdateStatus = async (reportId: string, newStatus: 'submitted' | 'in-progress' | 'resolved') => {
@@ -148,6 +192,30 @@ const AdminDashboard = () => {
         )
       );
       
+      // Send notification if status changed to in-progress or resolved
+      if (newStatus === 'in-progress' || newStatus === 'resolved') {
+        const report = reports.find(r => r.id === reportId);
+        if (report && report.reportedBy) {
+          const notificationTitle = newStatus === 'in-progress' 
+            ? 'Your report is now in progress' 
+            : 'Your report has been resolved';
+          const notificationContent = newStatus === 'in-progress'
+            ? `Your report "${report.title}" is now being processed.`
+            : `Your report "${report.title}" has been marked as resolved.`;
+          
+          await supabase
+            .from('notifications')
+            .insert({
+              recipient: report.reportedBy,
+              type: 'status_update',
+              title: notificationTitle,
+              content: notificationContent,
+              report_id: reportId,
+              read: false
+            });
+        }
+      }
+      
       toast({
         title: "Status updated",
         description: `Report status updated to ${newStatus}`,
@@ -165,10 +233,45 @@ const AdminDashboard = () => {
   };
 
   const handleCommentSubmit = async () => {
-    if (!selectedReport?.id || !comment.trim()) return;
+    if (!selectedReport?.id || !comment.trim() || !currentUser) return;
     
     try {
       setSubmittingComment(true);
+      
+      const newComment = {
+        report_id: selectedReport.id,
+        content: comment.trim(),
+        user_id: currentUser.uid,
+        user_name: currentUser.displayName || 'Admin',
+        is_admin: true,
+        created_at: new Date().toISOString()
+      };
+      
+      const { data, error } = await supabase
+        .from('report_comments')
+        .insert(newComment)
+        .select();
+        
+      if (error) throw error;
+      
+      // Add to local state
+      if (data && data.length > 0) {
+        setComments(prev => [...prev, data[0]]);
+      }
+      
+      // Send notification to the report owner
+      if (selectedReport.reportedBy) {
+        await supabase
+          .from('notifications')
+          .insert({
+            recipient: selectedReport.reportedBy,
+            type: 'comment',
+            title: 'New comment on your report',
+            content: `An admin has commented on your report "${selectedReport.title}"`,
+            report_id: selectedReport.id,
+            read: false
+          });
+      }
       
       toast({
         title: "Comment submitted",
@@ -389,6 +492,11 @@ const AdminDashboard = () => {
               </div>
               
               <div className="mt-4">
+                <Label>Comments</Label>
+                <div className="border rounded-md p-4 mb-4 bg-gray-50">
+                  <CommentsList comments={comments} isLoading={loadingComments} />
+                </div>
+                
                 <Label htmlFor="comment">Add a comment</Label>
                 <Textarea
                   placeholder="Add a comment..."

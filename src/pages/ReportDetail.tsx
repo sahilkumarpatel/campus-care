@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -13,6 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import supabase from '@/lib/supabase';
+import CommentsList from '@/components/reports/comments/CommentsList';
 
 const ReportDetail = () => {
   const { reportId } = useParams<{ reportId: string }>();
@@ -28,6 +28,8 @@ const ReportDetail = () => {
   const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [cancellingReport, setCancellingReport] = useState(false);
+  const [comments, setComments] = useState<any[]>([]);
+  const [loadingComments, setLoadingComments] = useState(true);
   
   useEffect(() => {
     const fetchReport = async () => {
@@ -80,7 +82,37 @@ const ReportDetail = () => {
     };
     
     fetchReport();
+    fetchComments();
   }, [reportId]);
+
+  const fetchComments = async () => {
+    if (!reportId) return;
+
+    try {
+      setLoadingComments(true);
+      
+      const { data, error } = await supabase
+        .from('report_comments')
+        .select('*')
+        .eq('report_id', reportId)
+        .order('created_at', { ascending: true });
+        
+      if (error) throw error;
+      
+      if (data) {
+        setComments(data);
+      }
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+      toast({
+        title: "Error",
+        description: "Failed to load comments",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingComments(false);
+    }
+  };
 
   const sendNotification = async (status: string) => {
     if (!report || !report.reportedBy) return;
@@ -154,13 +186,45 @@ const ReportDetail = () => {
   };
 
   const handleCommentSubmit = async () => {
-    if (!reportId || !comment.trim()) return;
+    if (!reportId || !comment.trim() || !currentUser) return;
     
     try {
       setSubmittingComment(true);
       
-      // In a real app, you would add this to a comments collection
-      // For demo purposes, we'll just show success toast
+      const newComment = {
+        report_id: reportId,
+        content: comment.trim(),
+        user_id: currentUser.uid,
+        user_name: currentUser.displayName || 'Anonymous',
+        is_admin: isAdmin || false,
+        created_at: new Date().toISOString()
+      };
+      
+      const { data, error } = await supabase
+        .from('report_comments')
+        .insert(newComment)
+        .select();
+        
+      if (error) throw error;
+      
+      // Add the new comment to the state
+      if (data && data.length > 0) {
+        setComments(prev => [...prev, data[0]]);
+      }
+      
+      // If admin is adding comment, notify the user
+      if (isAdmin && report.reportedBy) {
+        await supabase
+          .from('notifications')
+          .insert({
+            recipient: report.reportedBy,
+            type: 'comment',
+            title: 'New comment on your report',
+            content: `An admin has commented on your report "${report.title}"`,
+            report_id: reportId,
+            read: false
+          });
+      }
       
       toast({
         title: "Comment submitted",
@@ -329,10 +393,7 @@ const ReportDetail = () => {
               <CardTitle className="text-lg">Comments</CardTitle>
             </CardHeader>
             <CardContent className="pt-6">
-              <div className="flex items-center justify-center py-6 text-muted-foreground">
-                <MessageCircle className="mr-2 h-5 w-5" />
-                <span>No comments yet</span>
-              </div>
+              <CommentsList comments={comments} isLoading={loadingComments} />
               
               <div className="mt-4">
                 <Textarea
@@ -425,7 +486,6 @@ const ReportDetail = () => {
         </div>
       </div>
       
-      {/* Cancel Report Dialog */}
       <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
         <DialogContent>
           <DialogHeader>
