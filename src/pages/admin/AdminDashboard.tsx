@@ -123,20 +123,17 @@ const AdminDashboard = () => {
 
   const handleUpdateStatus = async (reportId: string, newStatus: 'submitted' | 'in-progress' | 'resolved') => {
     try {
-      // Try updating in Supabase
       const { error } = await supabase
         .from('reports')
         .update({ status: newStatus })
         .eq('id', reportId);
       
       if (error) {
-        // Fall back to Firebase
         await updateDoc(doc(db, 'reports', reportId), {
           status: newStatus
         });
       }
       
-      // Update local state
       setSelectedReport(prev => {
         if (!prev) return prev;
         return {
@@ -145,7 +142,6 @@ const AdminDashboard = () => {
         };
       });
       
-      // Update reports list
       setReports(prevReports => 
         prevReports.map(report => 
           report.id === reportId ? { ...report, status: newStatus } : report
@@ -157,7 +153,6 @@ const AdminDashboard = () => {
         description: `Report status updated to ${newStatus}`,
       });
       
-      // Close the modal after updating
       setIsViewModalOpen(false);
     } catch (error) {
       console.error('Error updating status:', error);
@@ -174,9 +169,6 @@ const AdminDashboard = () => {
     
     try {
       setSubmittingComment(true);
-      
-      // In a real app, you would add this to a comments collection
-      // For demo purposes, we'll just show success toast
       
       toast({
         title: "Comment submitted",
@@ -304,7 +296,7 @@ const AdminDashboard = () => {
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                     </ContextMenuTrigger>
-                    <ContextMenuContent align="end">
+                    <ContextMenuContent>
                       <ContextMenuItem onClick={() => handleViewReport(report)}>
                         <Edit className="mr-2 h-4 w-4" /> View
                       </ContextMenuItem>
