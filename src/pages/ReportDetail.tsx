@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -5,13 +6,13 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { ArrowLeft, MessageCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { db } from '@/lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/context/AuthContext';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import supabase, { toUUID } from '@/lib/supabase';
+import supabase, { toUUID, prepareCommentForSubmission } from '@/lib/supabase';
 import CommentsList from '@/components/reports/comments/CommentsList';
 
 const ReportDetail = () => {
@@ -124,12 +125,30 @@ const ReportDetail = () => {
         })
         .subscribe();
         
+      // Setup subscription for report deletion
+      const reportDeleteChannel = supabase
+        .channel('report_delete_changes')
+        .on('postgres_changes', {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'reports',
+          filter: `id=eq.${reportId}`
+        }, () => {
+          toast({
+            title: "Report Deleted",
+            description: "This report has been cancelled or deleted",
+          });
+          navigate('/my-reports');
+        })
+        .subscribe();
+
       return () => {
         supabase.removeChannel(commentsChannel);
         supabase.removeChannel(reportChannel);
+        supabase.removeChannel(reportDeleteChannel);
       };
     }
-  }, [reportId, toast]);
+  }, [reportId, toast, navigate]);
 
   const fetchComments = async () => {
     if (!reportId) return;
@@ -247,10 +266,13 @@ const ReportDetail = () => {
         created_at: new Date().toISOString()
       };
       
+      // Prepare the comment for submission
+      const preparedComment = prepareCommentForSubmission(newComment);
+      
       // Insert the comment
       const { data, error } = await supabase
         .from('report_comments')
-        .insert([newComment])
+        .insert([preparedComment])
         .select();
         
       if (error) {
@@ -274,7 +296,6 @@ const ReportDetail = () => {
               title: 'New comment on your report',
               content: `An admin has commented on your report "${report.title}"`,
               report_id: reportId,
-              user_id: report.reportedBy,
               read: false
             }]);
         } catch (notificationError) {
@@ -302,13 +323,21 @@ const ReportDetail = () => {
   };
 
   const handleCancelReport = async () => {
-    if (!reportId || !cancelReason.trim()) return;
+    if (!reportId) return;
     
     try {
       setCancellingReport(true);
       
-      // In a real app, you'd update the report status and add the cancellation reason
-      // For demo purposes, we'll just show success toast
+      // Delete the report in Supabase
+      const { error } = await supabase
+        .from('reports')
+        .delete()
+        .eq('id', reportId);
+        
+      if (error) {
+        // Fall back to Firebase
+        await deleteDoc(doc(db, 'reports', reportId));
+      }
       
       toast({
         title: "Report cancelled",
@@ -318,10 +347,8 @@ const ReportDetail = () => {
       setShowCancelDialog(false);
       setCancelReason('');
       
-      // Navigate back to my reports after a brief delay
-      setTimeout(() => {
-        navigate('/my-reports');
-      }, 1500);
+      // Navigate back to my reports
+      navigate('/my-reports');
     } catch (error) {
       console.error('Error cancelling report:', error);
       toast({
@@ -548,7 +575,7 @@ const ReportDetail = () => {
           <DialogHeader>
             <DialogTitle>Cancel Report</DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel this report? This action will mark the report as withdrawn.
+              Are you sure you want to cancel this report? This action will permanently delete the report.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">

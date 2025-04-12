@@ -53,7 +53,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isMobile = false, closeMobileMenu }) 
     },
   ];
 
-  // Admin routes - Remove the Manage Users link
+  // Admin routes - Removed the Manage Users link
   const adminRoutes = [
     { 
       name: 'Admin Dashboard', 

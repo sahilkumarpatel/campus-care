@@ -187,7 +187,7 @@ const AdminUserManagement = () => {
   return (
     <div className="space-y-6 p-4 md:p-8">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold">Manage Users</h1>
+        <h1 className="text-3xl font-bold">User Accounts</h1>
         
         <Button 
           onClick={() => setShowInviteDialog(true)}
