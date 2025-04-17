@@ -49,34 +49,6 @@ const Settings = () => {
           </div>
         </CardContent>
       </Card>
-      
-      <Card>
-        <CardHeader>
-          <CardTitle>Display Settings</CardTitle>
-          <CardDescription>Customize your visual experience</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="dark-mode">Dark Mode</Label>
-              <p className="text-sm text-muted-foreground">
-                Switch between light and dark theme
-              </p>
-            </div>
-            <Switch id="dark-mode" />
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label htmlFor="compact-view">Compact View</Label>
-              <p className="text-sm text-muted-foreground">
-                Display more items on the screen
-              </p>
-            </div>
-            <Switch id="compact-view" />
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };
