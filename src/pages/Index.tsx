@@ -91,9 +91,7 @@ const Index = () => {
           </div>
         </main>
 
-        <footer className="mt-20 border-t pt-8 text-center text-gray-500 text-sm">
-          <p>© {new Date().getFullYear()} CampusCare. All rights reserved.</p>
-        </footer>
+       
       </div>
     </div>
   );
